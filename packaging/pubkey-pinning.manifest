@@ -1,0 +1,30 @@
+<manifest>
+    <assign>
+        <filesystem path="/usr/bin/security-tests.sh" exec_label="_" />
+        <filesystem path="/usr/bin/security-tests-all.sh" exec_label="_" />
+
+        <filesystem path="/usr/bin/tests-summary.sh" exec_label="_" />
+        <filesystem path="/usr/bin/test-performance-check.sh" exec_label="_" />
+        <filesystem path="/usr/bin/perf" exec_label="_" />
+
+        <filesystem path="/usr/bin/libsmack-test" exec_label="_" />
+        <filesystem path="/usr/bin/libprivilege-control-test" exec_label="_" />
+        <filesystem path="/usr/bin/security-server-tests-client-smack" exec_label="_" />
+        <filesystem path="/usr/bin/security-server-tests-server" exec_label="_" />
+        <filesystem path="/usr/bin/security-server-tests-password" exec_label="_" />
+        <filesystem path="/usr/bin/security-server-tests-privilege" exec_label="_" />
+        <filesystem path="/usr/bin/security-server-tests-stress" exec_label="_" />
+        <filesystem path="/usr/bin/security-server-tests-dbus" exec_label="_" />
+        <filesystem path="/usr/bin/security-manager-tests" exec_label="_" />
+        <filesystem path="/usr/bin/cynara-tests" exec_label="_" />
+        <filesystem path="/usr/bin/ckm-tests" exec_label="User" />
+        <filesystem path="/usr/bin/ckm-tests" exec_label="System" />
+
+        <filesystem path="/usr/bin/test-app-wgt" exec_label="User" />
+        <filesystem path="/usr/bin/test-app-efl" exec_label="User" />
+        <filesystem path="/usr/bin/test-app-osp" exec_label="User" />
+    </assign>
+    <request>
+        <domain name="_" />
+    </request>
+</manifest>
