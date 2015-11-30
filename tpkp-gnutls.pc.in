@@ -1,0 +1,9 @@
+libdir=@LIB_INSTALL_DIR@
+includedir=@INCLUDEDIR@
+
+Name: tpkp-gnutls
+Description: Tizen HPKP for gnutls
+Version: @VERSION@
+Requires: gnutls
+Libs: -L${libdir} -ltpkp-gnutls -ltpkp-common
+Cflags: -I${includedir}/tpkp/gnutls -I${includedir}/tpkp/common
