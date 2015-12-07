@@ -4,6 +4,6 @@ includedir=@INCLUDEDIR@
 Name: tpkp-curl
 Description: Tizen HPKP for curl
 Version: @VERSION@
-Requires: openssl curl
+Requires: openssl libcurl
 Libs: -L${libdir} -ltpkp-curl -ltpkp-common
 Cflags: -I${includedir}/tpkp/curl -I${includedir}/tpkp/common
