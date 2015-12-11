@@ -28,6 +28,8 @@
 #include <sstream>
 #include <type_traits>
 
+#include <openssl/x509.h>
+
 #include "tpkp_error.h"
 #include "tpkp_logger.h"
 
@@ -68,6 +70,8 @@ struct HashValue {
 	{}
 };
 
+using CertDer = RawBuffer;
+using CertDerChain = std::vector<CertDer>;
 using HashValueVector = std::vector<HashValue>;
 
 class EXPORT_API Exception : public std::exception {
@@ -90,7 +94,7 @@ public:
 	virtual ~Context();
 	explicit Context(const std::string &url);
 
-	void addPubkeyHash(HashAlgo algo, const RawBuffer &hashBuf);
+	void extractPubkeyHashes(const CertDerChain &chain);
 	bool checkPubkeyPins(void);
 	bool hasPins(void);
 
@@ -101,6 +105,14 @@ private:
 
 EXPORT_API
 pid_t getThreadId(void);
+
+using X509Ptr = std::unique_ptr<X509, void(*)(X509 *)>;
+
+EXPORT_API
+X509Ptr d2iCert(const CertDer &cert);
+
+EXPORT_API
+CertDer i2dCert(X509 *x);
 
 }
 
