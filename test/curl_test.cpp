@@ -88,7 +88,7 @@ static CURL *makeLocalDefaultHandle(std::string url)
 
 	BOOST_REQUIRE_MESSAGE(
 		curl_easy_setopt(handle, CURLOPT_URL, url.c_str()) == CURLE_OK,
-		"Failed to set opt url : " << targetUrl);
+		"Failed to set opt url : " << url);
 
 	BOOST_REQUIRE_MESSAGE(
 		curl_easy_setopt(handle, CURLOPT_VERBOSE, 0L) == CURLE_OK,
@@ -134,6 +134,14 @@ static void performWithUrl(std::string url)
 	BOOST_REQUIRE_MESSAGE(
 		res == CURLE_OK,
 		"Failed to perform curl: " << curl_easy_strerror(res));
+
+	char *ip = nullptr;
+	long port = 0;
+	res = curl_easy_getinfo(curl, CURLINFO_PRIMARY_IP, &ip);
+	BOOST_REQUIRE_MESSAGE(res == CURLE_OK, "Failed to getinfo of ip: " << curl_easy_strerror(res));
+	res = curl_easy_getinfo(curl, CURLINFO_PRIMARY_PORT, &port);
+	BOOST_REQUIRE_MESSAGE(res == CURLE_OK, "Failed to getinfo of port: " << curl_easy_strerror(res));
+	std::cout << "url: " << url << " ip: " << ip << " port: " << port << std::endl;
 
 	tpkp_curl_cleanup();
 	curl_easy_cleanup(curl);

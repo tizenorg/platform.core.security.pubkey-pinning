@@ -19,14 +19,20 @@
  * @version     1.0
  * @brief       Tizen Https Public Key Pinning implementation for gnutls.
  */
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <dirent.h>
+
 #include <string>
 #include <memory>
 #include <map>
 #include <mutex>
 
 #include <gnutls/gnutls.h>
-#include <gnutls/abstract.h>
-#include <gnutls/x509.h>
+
+#include <openssl/pem.h>
+#include <openssl/x509.h>
 
 #include "tpkp_common.h"
 #include "tpkp_gnutls.h"
@@ -53,91 +59,128 @@ inline int err_tpkp_to_gnutlse(tpkp_e err) noexcept
 	}
 }
 
-TPKP::RawBuffer getPubkeyHash(gnutls_x509_crt_t cert, TPKP::HashAlgo algo)
+bool _verifyCert(X509 *subject, X509 *issuer)
 {
-	std::unique_ptr<gnutls_pubkey_t, void(*)(gnutls_pubkey_t *)>
-		pubkeyPtr(new gnutls_pubkey_t, [](gnutls_pubkey_t *ptr)->void
-			{
-				if (ptr != nullptr)
-					gnutls_pubkey_deinit(*ptr);
-			});
+	std::unique_ptr<EVP_PKEY, void(*)(EVP_PKEY *)> ppubkey(X509_get_pubkey(issuer), EVP_PKEY_free);
+	TPKP_CHECK_THROW_EXCEPTION(!!ppubkey, TPKP_E_INTERNAL, "Failed to get pubkey from issuer cert");
 
-	int ret = gnutls_pubkey_init(pubkeyPtr.get());
-	TPKP_CHECK_THROW_EXCEPTION(ret == GNUTLS_E_SUCCESS,
-		TPKP_E_INTERNAL,
-		"Failed to gnutls_pubkey_init. gnutls ret: " << ret);
+	return X509_verify(subject, ppubkey.get()) == 1;
+}
 
-	ret = gnutls_pubkey_import_x509(*pubkeyPtr, cert, 0);
-	TPKP_CHECK_THROW_EXCEPTION(ret == GNUTLS_E_SUCCESS,
-		TPKP_E_INVALID_CERT,
-		"Failed to gnutls_pubkey_import_x509. gnutls ret: " << ret);
+/* only support PEM format */
+TPKP::X509Ptr _loadCert(const std::string &path)
+{
+	std::unique_ptr<FILE, int(*)(FILE *)> fp(fopen(path.c_str(), "rb"), fclose);
+	TPKP_CHECK_THROW_EXCEPTION(!!fp, TPKP_E_INTERNAL, "cannot open system cert: " << path);
 
-	size_t len = 0;
-	ret = gnutls_pubkey_export(*pubkeyPtr, GNUTLS_X509_FMT_DER, nullptr, &len);
-	TPKP_CHECK_THROW_EXCEPTION(
-		(ret == GNUTLS_E_SHORT_MEMORY_BUFFER || ret == GNUTLS_E_SUCCESS) && len != 0,
-		TPKP_E_INVALID_CERT,
-		"Failed to gnutls_pubkey_export for getting size. gnutls ret: "
-			<< ret << " desc: " << gnutls_strerror(ret) << " size: " << len);
-
-	TPKP::RawBuffer derbuf(len, 0x00);
-	ret = gnutls_pubkey_export(*pubkeyPtr, GNUTLS_X509_FMT_DER, derbuf.data(), &len);
-	TPKP_CHECK_THROW_EXCEPTION(ret == GNUTLS_E_SUCCESS && len == derbuf.size(),
-		TPKP_E_INVALID_CERT,
-		"Failed to gnutls_pubkey_export. gnutls ret: "
-			<< ret << " desc: " << gnutls_strerror(ret));
-
-	gnutls_datum_t pubkeyder = {
-		derbuf.data(),
-		static_cast<unsigned int>(derbuf.size())
-	};
-
-	auto gnutlsHashAlgo = GNUTLS_DIG_SHA1; /* default hash alog */
-	TPKP::RawBuffer out;
-	switch (algo) {
-	case TPKP::HashAlgo::SHA1:
-		out.resize(TPKP::typeCast(TPKP::HashSize::SHA1), 0x00);
-		len = out.size();
-		gnutlsHashAlgo = GNUTLS_DIG_SHA1;
-		break;
-
-	default:
-		TPKP_CHECK_THROW_EXCEPTION(
-			false,
-			TPKP_E_INTERNAL,
-			"Invalid hash algo type in getPubkeyHash.");
+	TPKP::X509Ptr xp(PEM_read_X509(fp.get(), nullptr, nullptr, nullptr), X509_free);
+	if (!xp) {
+		rewind(fp.get());
+		xp.reset(PEM_read_X509_AUX(fp.get(), nullptr, nullptr, nullptr));
 	}
 
-	ret = gnutls_fingerprint(gnutlsHashAlgo, &pubkeyder, out.data(), &len);
-	TPKP_CHECK_THROW_EXCEPTION(ret == GNUTLS_E_SUCCESS && len == out.size(),
-		TPKP_E_FAILED_GET_PUBKEY_HASH,
-		"Failed to gnutls_fingerprint. gnutls ret: "
-			<< ret << " desc: " << gnutls_strerror(ret));
+	TPKP_CHECK_THROW_EXCEPTION(!!xp, TPKP_E_INTERNAL, "cannot read x509 from system cert: " << path);
 
-	return out;
+	return xp;
 }
 
+std::string _getIssuerHash(X509 *x)
+{
+	unsigned long ulhash = X509_issuer_name_hash(x);
+	char tmp[9] = {0};
+	snprintf(tmp, 9, "%08lx", ulhash);
+
+	return std::string(tmp);
 }
+
+bool _searchIssuer(const std::string &dir, X509 *x, TPKP::CertDer &out)
+{
+	std::string issuerHash = _getIssuerHash(x);
+	SLOGD("issuer hash to find: %s", issuerHash.c_str());
+
+	std::unique_ptr<DIR, int(*)(DIR *)> pdir(opendir(dir.c_str()), closedir);
+	TPKP_CHECK_THROW_EXCEPTION(!!pdir, TPKP_E_INTERNAL,
+		"Failed to open system cert dir: " << dir);
+
+	std::unique_ptr<struct dirent> pentry(new struct dirent);
+
+	struct dirent *pdirent = nullptr;
+	while (readdir_r(pdir.get(), pentry.get(), &pdirent) == 0 && pdirent) {
+		if (pdirent->d_type == DT_DIR)
+			continue;
+
+		/*
+		 * trusted cert file name format is "(8 hexs of hash) + '.' + (numeric)"
+		 * [0-9a-z]{8}\.[0-9]
+		 * i.e.: 1234abcd.0
+		 */
+		auto name = pdirent->d_name;
+		if (strlen(name) >= 10 && issuerHash.compare(0, 8, name, 8) != 0)
+			continue;
+
+		auto pcandidate = _loadCert(dir + name);
+		if (_verifyCert(x, pcandidate.get())) {
+			SLOGD("verify certificate success with candidate cert: %s%s", dir.c_str(), name);
+			out = TPKP::i2dCert(pcandidate.get());
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool _completeCertChain(TPKP::CertDerChain &chain)
+{
+	auto px = TPKP::d2iCert(chain.back());
+	if (X509_subject_name_hash(px.get()) == X509_issuer_name_hash(px.get())) {
+		SLOGD("peer's cert chain is already completed.");
+		return true;
+	}
+
+	TPKP::CertDer issuer;
+	if (!_searchIssuer("/etc/ssl/certs/", px.get(), issuer)) {
+		SLOGE("Failed to search root CA cert in system trusted cert store.");
+		return false;
+	}
+
+	chain.emplace_back(std::move(issuer));
+
+	return true;
+}
+
+std::string _verificationStatusToString(unsigned int status)
+{
+	gnutls_datum_t errdatum = {nullptr, 0};
+	gnutls_certificate_verification_status_print(status, GNUTLS_CRT_X509, &errdatum, 0);
+	std::string errstr = reinterpret_cast<char *>(errdatum.data);
+	gnutls_free(errdatum.data);
+	return errstr;
+}
+
+} /* anonymous namespace */
 
 EXPORT_API
-int tpkp_gnutls_verify_callback(gnutls_session_t session)
+int tpkp_gnutls_certificate_verify_callback(gnutls_session_t session)
 {
 	tpkp_e res = TPKP::ExceptionSafe([&]{
 		gnutls_certificate_type_t type = gnutls_certificate_type_get(session);
 		if (type != GNUTLS_CRT_X509) {
-			//
-			// TODO: what should we do if it's not x509 type cert?
-			// for now, just return 0 which means verification success
-			//
+			/*
+			 * TODO: what should we do if it's not x509 type cert?
+			 * for now, just return which means verification success
+			 */
 			SLOGW("Certificate type of session isn't X509. skipt for now...");
 			return;
 		}
 
-		unsigned int listSize = 0;
-		const gnutls_datum_t *certChain = gnutls_certificate_get_peers(session, &listSize);
-		TPKP_CHECK_THROW_EXCEPTION(certChain != nullptr && listSize != 0,
+		unsigned int status = 0;
+		int res = gnutls_certificate_verify_peers2(session, &status);
+		TPKP_CHECK_THROW_EXCEPTION(res == GNUTLS_E_SUCCESS && status == 0,
 			TPKP_E_INVALID_PEER_CERT_CHAIN,
-			"no certificate from peer!");
+			"Failed to verify peer!"
+				<< " res: " << res
+				<< " desc: " << gnutls_strerror(res)
+				<< " status: " << _verificationStatusToString(status));
 
 		auto tid = TPKP::getThreadId();
 		std::string url;
@@ -160,31 +203,27 @@ int tpkp_gnutls_verify_callback(gnutls_session_t session)
 			return;
 		}
 
-		for (unsigned int i = 0; i < listSize; i++) {
-			std::unique_ptr<gnutls_x509_crt_t, void(*)(gnutls_x509_crt_t *)>
-				crtPtr(new gnutls_x509_crt_t, [](gnutls_x509_crt_t *ptr)->void
-					{
-						if (ptr != nullptr)
-							gnutls_x509_crt_deinit(*ptr);
-					});
+		unsigned int listSize = 0;
+		auto gnuChain = gnutls_certificate_get_peers(session, &listSize);
+		TPKP_CHECK_THROW_EXCEPTION(gnuChain != nullptr && listSize != 0,
+			TPKP_E_INVALID_PEER_CERT_CHAIN,
+			"no certificate from peer!");
 
-			TPKP_CHECK_THROW_EXCEPTION(
-				gnutls_x509_crt_init(crtPtr.get()) == GNUTLS_E_SUCCESS,
-				TPKP_E_INTERNAL,
-				"Failed to gnutls_x509_crt_init.");
+		TPKP::CertDerChain chain;
+		for (unsigned int i = 0; i < listSize; i++)
+			chain.emplace_back(
+				gnuChain[i].data, gnuChain[i].data + gnuChain[i].size);
 
-			TPKP_CHECK_THROW_EXCEPTION(
-				gnutls_x509_crt_import(*crtPtr, certChain++, GNUTLS_X509_FMT_DER) >= 0,
-				TPKP_E_INVALID_CERT,
-				"Failed to import DER cert to gnutls crt");
+		TPKP_CHECK_THROW_EXCEPTION(_completeCertChain(chain),
+			TPKP_E_INTERNAL,
+			"Peer's certificate chain cannot be completed. "
+			"It shouldn't be happened because gnutls_certificate_verify_peers2 "
+			"have been succeeded already. It's internal error!");
 
-			ctx.addPubkeyHash(
-				TPKP::HashAlgo::SHA1,
-				getPubkeyHash(*crtPtr, TPKP::HashAlgo::SHA1));
-		}
+		ctx.extractPubkeyHashes(chain);
 
 		TPKP_CHECK_THROW_EXCEPTION(ctx.checkPubkeyPins(),
-			TPKP_E_PUBKEY_MISMATCH, "THe pubkey mismatched with pinned data!");
+			TPKP_E_PUBKEY_MISMATCH, "The pubkey mismatched with pinned data!");
 	});
 
 	return err_tpkp_to_gnutlse(res);
@@ -208,7 +247,7 @@ tpkp_e tpkp_gnutls_set_url_data(const char *url)
 EXPORT_API
 void tpkp_gnutls_cleanup(void)
 {
-	tpkp_e res = TPKP::ExceptionSafe([&]{
+	TPKP::ExceptionSafe([&]{
 		auto tid = TPKP::getThreadId();
 
 		{
@@ -218,8 +257,6 @@ void tpkp_gnutls_cleanup(void)
 
 		SLOGD("cleanup url data from thread id[%u]", tid);
 	});
-
-	(void) res;
 }
 
 EXPORT_API

@@ -51,41 +51,6 @@ inline CURLcode err_tpkp_to_curle(tpkp_e err) noexcept
 	}
 }
 
-TPKP::RawBuffer getPubkeyHash(X509 *cert, TPKP::HashAlgo algo)
-{
-	std::unique_ptr<EVP_PKEY, void(*)(EVP_PKEY *)>
-		pubkeyPtr(X509_get_pubkey(cert), EVP_PKEY_free);
-
-	TPKP_CHECK_THROW_EXCEPTION(pubkeyPtr,
-		TPKP_E_INVALID_CERT, "Failed to get pubkey from cert.");
-
-	unsigned char *der = nullptr;
-	auto len = i2d_PUBKEY(pubkeyPtr.get(), &der);
-	TPKP_CHECK_THROW_EXCEPTION(len > 0,
-		TPKP_E_INVALID_CERT, "Failed to convert pem pubkey to der.");
-
-	TPKP::RawBuffer pubkeyder(der, der + len);
-	free(der);
-	unsigned char *hashResult = nullptr;
-	TPKP::RawBuffer out;
-	switch (algo) {
-	case TPKP::HashAlgo::SHA1:
-		out.resize(SHA_DIGEST_LENGTH);
-		hashResult = SHA1(pubkeyder.data(), pubkeyder.size(), out.data());
-
-		break;
-
-	default:
-		TPKP_CHECK_THROW_EXCEPTION(false,
-			TPKP_E_INTERNAL, "Invalid hash algo type in get_pubkey_hash");
-	}
-
-	TPKP_CHECK_THROW_EXCEPTION(hashResult,
-		TPKP_E_FAILED_GET_PUBKEY_HASH, "Failed to get pubkey haso by openssl SHA1.");
-
-	return out;
-}
-
 } // anonymous namespace
 
 
@@ -115,16 +80,17 @@ int tpkp_curl_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 			return;
 		}
 
-		auto chain = X509_STORE_CTX_get1_chain(x509_ctx);
-		int num = sk_X509_num(chain);
+		auto osslChain = X509_STORE_CTX_get1_chain(x509_ctx);
+		int num = sk_X509_num(osslChain);
 		TPKP_CHECK_THROW_EXCEPTION(num != -1,
 			TPKP_E_INVALID_PEER_CERT_CHAIN,
 			"Invalid cert chain from x509_ctx in verify callback.");
 
+		TPKP::CertDerChain chain;
 		for (int i = 0; i < num; i++)
-			ctx.addPubkeyHash(
-				TPKP::HashAlgo::SHA1,
-				getPubkeyHash(sk_X509_value(chain, i), TPKP::HashAlgo::SHA1));
+			chain.emplace_back(TPKP::i2dCert(sk_X509_value(osslChain, i)));
+
+		ctx.extractPubkeyHashes(chain);
 
 		TPKP_CHECK_THROW_EXCEPTION(ctx.checkPubkeyPins(),
 			TPKP_E_PUBKEY_MISMATCH, "The pubkey mismatched with pinned data!");
