@@ -28,6 +28,9 @@
 #include <new>
 #include <algorithm>
 #include <iostream>
+#include <mutex>
+
+#include <openssl/evp.h>
 
 #include "net/http/transport_security_state.h"
 #include "net/http/transport_security_state_static.h"
@@ -60,6 +63,29 @@ inline std::string _toLower(const std::string &host)
 } // anonymous namespace
 
 namespace TPKP {
+
+X509Ptr d2iCert(const CertDer &cert)
+{
+	const unsigned char *ptr = cert.data();
+	X509 *x = nullptr;
+
+	d2i_X509(&x, &ptr, static_cast<int>(cert.size()));
+	TPKP_CHECK_THROW_EXCEPTION(x != nullptr,
+		TPKP_E_INVALID_CERT, "Failed to transform cert format d2i");
+
+	return X509Ptr(x, X509_free);
+}
+
+CertDer i2dCert(X509 *x)
+{
+	unsigned char *der = nullptr;
+	int size = i2d_X509(x, &der);
+	TPKP_CHECK_THROW_EXCEPTION(size > 0 && !!der,
+		TPKP_E_INVALID_CERT,
+		"Failed to transform cert format i2d");
+
+	return CertDer(der, der + size);
+}
 
 pid_t getThreadId()
 {
@@ -107,7 +133,7 @@ public:
 	virtual ~Impl();
 	explicit Impl(const std::string &url);
 
-	void addPubkeyHash(HashAlgo algo, const RawBuffer &hashBuf);
+	void extractPubkeyHashes(const CertDerChain &chain);
 	bool checkPubkeyPins(void);
 	bool hasPins(void);
 
@@ -116,9 +142,13 @@ private:
 	std::string m_host;
 	net::PreloadResult m_preloaded;
 	HashValueVector m_hashes;
+	CertDerChain m_chain;
 
 	bool LoadPreloadedPins(void);
 	bool HashesIntersect(const char *const *hashesArr);
+	static bool isCompleteChain(const CertDerChain &chain);
+	static bool s_isInitialized;
+	static std::mutex s_mutex;
 
 	class HashValuesEqual {
 	public:
@@ -129,8 +159,26 @@ private:
 	};
 };
 
+bool Context::Impl::s_isInitialized = false;
+std::mutex Context::Impl::s_mutex;
+
 Context::Impl::Impl(const std::string &url) : m_url(url)
 {
+	if (!s_isInitialized) {
+		/*
+		 *  duplicated conditional branch for in case of
+		 *  one thread entered first branch when the other
+		 *  thread is in mutex lock scope already.
+		 *  lock scope is inside of one outer conditional branch
+		 *  for mutex-free logic for general cases (when already initialized)
+		 */
+		std::lock_guard<std::mutex> lock(s_mutex);
+		if (!s_isInitialized) {
+			OpenSSL_add_all_algorithms();
+			s_isInitialized = true;
+		}
+	}
+
 	url::Parsed parsed;
 	url::ParseStandardURL(m_url.c_str(), m_url.length(), &parsed);
 	TPKP_CHECK_THROW_EXCEPTION(parsed.host.is_valid(),
@@ -151,9 +199,37 @@ Context::Impl::Impl(const std::string &url) : m_url(url)
 
 Context::Impl::~Impl() {}
 
-void Context::Impl::addPubkeyHash(HashAlgo algo, const RawBuffer &hashBuf)
+bool Context::Impl::isCompleteChain(const CertDerChain &chain)
 {
-	m_hashes.emplace_back(algo, hashBuf);
+	X509Ptr xPtr = d2iCert(chain.back());
+
+	return X509_subject_name_hash(xPtr.get()) == X509_issuer_name_hash(xPtr.get());
+}
+
+void Context::Impl::extractPubkeyHashes(const CertDerChain &chain)
+{
+	TPKP_CHECK_THROW_EXCEPTION(isCompleteChain(chain),
+		TPKP_E_INVALID_PEER_CERT_CHAIN, "cert chain from peer isn't completed!");
+
+	for (const auto &cert : chain) {
+		X509Ptr xPtr = d2iCert(cert);
+		std::unique_ptr<EVP_PKEY, void(*)(EVP_PKEY *)>
+			pubkeyPtr(X509_get_pubkey(xPtr.get()), EVP_PKEY_free);
+		TPKP_CHECK_THROW_EXCEPTION(!!pubkeyPtr,
+			TPKP_E_INVALID_CERT, "Failed to get pubkey from cert");
+
+		unsigned char *der = nullptr;
+		auto len = i2d_PUBKEY(pubkeyPtr.get(), &der);
+		TPKP_CHECK_THROW_EXCEPTION(len > 0,
+			TPKP_E_INVALID_CERT, "Failed to convert evp pubkey to der");
+
+		CertDer pubkeyder(der, der + len);
+		free(der);
+
+		RawBuffer hash(SHA_DIGEST_LENGTH, 0x00);
+		SHA1(pubkeyder.data(), pubkeyder.size(), hash.data());
+		m_hashes.emplace_back(HashAlgo::SHA1, std::move(hash));
+	}
 }
 
 bool Context::Impl::checkPubkeyPins(void)
@@ -240,10 +316,9 @@ bool Context::Impl::HashValuesEqual::operator()(const HashValue &other) const
 Context::Context(const std::string &url) : pImpl(new Impl{url}) {}
 Context::~Context() {}
 
-void Context::addPubkeyHash(HashAlgo algo, const RawBuffer &hashBuf)
+void Context::extractPubkeyHashes(const CertDerChain &chain)
 {
-	SLOGD("add public key hash of algo[%d]", algo);
-	pImpl->addPubkeyHash(algo, hashBuf);
+	pImpl->extractPubkeyHashes(chain);
 }
 
 bool Context::checkPubkeyPins(void)
