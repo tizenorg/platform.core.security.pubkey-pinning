@@ -27,16 +27,17 @@ extern "C" {
 #endif
 
 typedef enum {
-	TPKP_E_NONE                    = 0,
-	TPKP_E_MEMORY                  = -1,
-	TPKP_E_INVALID_URL             = -2,
-	TPKP_E_INVALID_CERT            = -3,
-	TPKP_E_FAILED_GET_PUBKEY_HASH  = -4,
-	TPKP_E_NO_URL_DATA             = -5,
-	TPKP_E_INVALID_PEER_CERT_CHAIN = -6,
-	TPKP_E_PUBKEY_MISMATCH         = -7,
-	TPKP_E_STD_EXCEPTION           = -99,
-	TPKP_E_INTERNAL                = -100
+	TPKP_E_NONE                     = 0,
+	TPKP_E_MEMORY                   = -1,
+	TPKP_E_INVALID_URL              = -2,
+	TPKP_E_INVALID_CERT             = -3,
+	TPKP_E_FAILED_GET_PUBKEY_HASH   = -4,
+	TPKP_E_NO_URL_DATA              = -5,
+	TPKP_E_INVALID_PEER_CERT_CHAIN  = -6,
+	TPKP_E_PUBKEY_MISMATCH          = -7,
+	TPKP_E_CERT_VERIFICATION_FAILED = -8,
+	TPKP_E_STD_EXCEPTION            = -99,
+	TPKP_E_INTERNAL                 = -100
 } tpkp_e;
 
 #ifdef __cplusplus
