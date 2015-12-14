@@ -44,6 +44,7 @@ class BitReader {
         num_bits_(num_bits),
         num_bytes_((num_bits + 7) / 8),
         current_byte_index_(0),
+        current_byte_(0),
         num_bits_used_(8) {}
 
   // Next sets |*out| to the next bit from the input. It returns false if no

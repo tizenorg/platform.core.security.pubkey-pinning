@@ -28,8 +28,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 #include <gnutls/gnutls.h>
 #include <tpkp_gnutls.h>
@@ -72,10 +70,8 @@ void connectWithUrl(const std::string &url, int &sockfd)
 		if (sockfd == -1)
 			continue;
 
-		if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1) {
-			char *ipaddr = inet_ntoa(*((struct in_addr *)rp->ai_addr));
+		if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1)
 			break;
-		}
 
 		close(sockfd);
 	}
@@ -196,7 +192,8 @@ void performHandshake(DataSet &data)
 void cleanup(DataSet &data)
 {
 	gnutls_bye(data.session, GNUTLS_SHUT_RDWR);
-	close(data.sockfd);
+	if (data.sockfd > 0)
+		close(data.sockfd);
 	gnutls_certificate_free_credentials(data.cred);
 	gnutls_deinit(data.session);
 
