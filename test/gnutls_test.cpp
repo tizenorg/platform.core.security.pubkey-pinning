@@ -19,107 +19,72 @@
  * @version     1.0
  * @brief       tpkp_gnutls unit test.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <thread>
 
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include <iostream>
-
 #include <gnutls/gnutls.h>
-
 #include <tpkp_gnutls.h>
-
 #include <boost/test/unit_test.hpp>
 
-#define SHA1_LENGTH 20
-
 namespace {
-const std::string targetUrl = "https://WwW.GooGle.cO.Kr";
 
-const char certStr[] =
-	"-----BEGIN CERTIFICATE-----\n"
-	"MIIDfTCCAuagAwIBAgIDErvmMA0GCSqGSIb3DQEBBQUAME4xCzAJBgNVBAYTAlVT\n"
-	"MRAwDgYDVQQKEwdFcXVpZmF4MS0wKwYDVQQLEyRFcXVpZmF4IFNlY3VyZSBDZXJ0\n"
-	"aWZpY2F0ZSBBdXRob3JpdHkwHhcNMDIwNTIxMDQwMDAwWhcNMTgwODIxMDQwMDAw\n"
-	"WjBCMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNR2VvVHJ1c3QgSW5jLjEbMBkGA1UE\n"
-	"AxMSR2VvVHJ1c3QgR2xvYmFsIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB\n"
-	"CgKCAQEA2swYYzD99BcjGlZ+W988bDjkcbd4kdS8odhM+KhDtgPpTSEHCIjaWC9m\n"
-	"OSm9BXiLnTjoBbdqfnGk5sRgprDvgOSJKA+eJdbtg/OtppHHmMlCGDUUna2YRpIu\n"
-	"T8rxh0PBFpVXLVDviS2Aelet8u5fa9IAjbkU+BQVNdnARqN7csiRv8lVK83Qlz6c\n"
-	"JmTM386DGXHKTubU1XupGc1V3sjs0l44U+VcT4wt/lAjNvxm5suOpDkZALeVAjmR\n"
-	"Cw7+OC7RHQWa9k0+bw8HHa8sHo9gOeL6NlMTOdReJivbPagUvTLrGAMoUgRx5asz\n"
-	"PeE4uwc2hGKceeoWMPRfwCvocWvk+QIDAQABo4HwMIHtMB8GA1UdIwQYMBaAFEjm\n"
-	"aPkr0rKV10fYIyAQTzOYkJ/UMB0GA1UdDgQWBBTAephojYn7qwVkDBF9qn1luMrM\n"
-	"TjAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBBjA6BgNVHR8EMzAxMC+g\n"
-	"LaArhilodHRwOi8vY3JsLmdlb3RydXN0LmNvbS9jcmxzL3NlY3VyZWNhLmNybDBO\n"
-	"BgNVHSAERzBFMEMGBFUdIAAwOzA5BggrBgEFBQcCARYtaHR0cHM6Ly93d3cuZ2Vv\n"
-	"dHJ1c3QuY29tL3Jlc291cmNlcy9yZXBvc2l0b3J5MA0GCSqGSIb3DQEBBQUAA4GB\n"
-	"AHbhEm5OSxYShjAGsoEIz/AIx8dxfmbuwu3UOx//8PDITtZDOLC5MH0Y0FWDomrL\n"
-	"NhGc6Ehmo21/uBPUR/6LWlxz/K7ZGzIZOKuXNBSqltLroxwUCEm2u+WR74M26x1W\n"
-	"b8ravHNjkOR/ez4iyz0H7V84dJzjA1BOoa+Y7mHyhD8S\n"
-	"-----END CERTIFICATE-----\n";
-
-const char sha1hash[] = // kSPKIHash_GeoTrustGlobal
-	    "\xc0\x7a\x98\x68\x8d\x89\xfb\xab\x05\x64"
-	    "\x0c\x11\x7d\xaa\x7d\x65\xb8\xca\xcc\x4e";
-
-int tcp_connect(const char *ip, int port)
-{
-	int sock;
-	struct sockaddr_in server_addr;
-
-	BOOST_REQUIRE_MESSAGE(
-		(sock = socket(PF_INET, SOCK_STREAM, 0)) >= 0,
-		"Cannot create socket!");
-
-	memset(&server_addr, 0x00, sizeof(server_addr));
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = inet_addr(ip);
-	server_addr.sin_port = htons(port);
-
-	BOOST_REQUIRE_MESSAGE(
-		(connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr))) >= 0,
-		"Cannot connect to sock:" << sock);
-
-	return sock;
-}
-
-void tcp_close(int sd)
-{
-	close(sd);
-}
-
-typedef struct _GIOGnuTLSChannel GIOGnuTLSChannel;
-
-struct _GIOGnuTLSChannel {
-    int fd;
+struct DataSet {
+	gnutls_session_t session;
+	gnutls_certificate_credentials_t cred;
+	int sockfd;
 };
 
-gnutls_session_t makeDefaultSession(void)
+static std::vector<std::string> s_urlList = {
+	"www.google.com",
+	"www.youtube.com",
+	"www.spideroak.com",
+	"www.facebook.com",
+	"www.dropbox.com",
+	"www.twitter.com",
+	"www.hackerrank.com", /* no pinned data exist */
+	"www.algospot.com"    /* no pinned data exist */
+};
+
+void connectWithUrl(const std::string &url, int &sockfd)
 {
-	int ret = gnutls_global_init();
-	BOOST_REQUIRE_MESSAGE(
-		ret == GNUTLS_E_SUCCESS,
-		"Failed to gnutls global init: " << gnutls_strerror(ret));
+	struct addrinfo *result;
+	struct addrinfo hints;
+	memset(&hints, 0x00, sizeof(struct addrinfo));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_CANONNAME;
 
-	gnutls_session_t session;
-	ret = gnutls_init(&session, GNUTLS_CLIENT);
-	BOOST_REQUIRE_MESSAGE(
-		ret == GNUTLS_E_SUCCESS,
-		"Failed to gnutls init session: " << gnutls_strerror(ret));
+	int s = getaddrinfo(url.c_str(), "https", &hints, &result);
+	BOOST_REQUIRE_MESSAGE(s == 0, "getaddrinfo err code: " << s << " desc: " << gai_strerror(s));
 
-	ret = gnutls_set_default_priority(session);
-	BOOST_REQUIRE_MESSAGE(
-		ret == GNUTLS_E_SUCCESS,
-		"Failed to set default priority on session: " << gnutls_strerror(ret));
+	struct addrinfo *rp;
+	for (rp = result; rp != nullptr; rp = rp->ai_next) {
+		sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if (sockfd == -1)
+			continue;
 
-	return session;
+		if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1) {
+			char *ipaddr = inet_ntoa(*((struct in_addr *)rp->ai_addr));
+			break;
+		}
+
+		close(sockfd);
+	}
+
+	BOOST_REQUIRE_MESSAGE(rp != nullptr, "Could not connect on url: " << url);
+
+	std::cout << "url[" << url << "] canonname[" << result->ai_canonname << "] connected!" << std::endl;
+
+	freeaddrinfo(result);
 }
 
 inline gnutls_certificate_credentials_t makeDefaultCred(gnutls_certificate_verify_function *verify_callback)
@@ -135,54 +100,223 @@ inline gnutls_certificate_credentials_t makeDefaultCred(gnutls_certificate_verif
 	BOOST_REQUIRE_MESSAGE(
 		ret > 0,
 		"Failed to gnutls_certificate_set_x509_trust_file ret: " << ret);
-	std::cout << "x509 trust file loaded. cert num: " << ret << std::endl;
 
 	gnutls_certificate_set_verify_function(cred, verify_callback);
 
 	return cred;
 }
 
-}
-
-BOOST_AUTO_TEST_SUITE(TPKP_GNUTLS_TEST)
-
-#define MAX_BUF 1024
-#define MSG "GET / HTTP/1.0\r\n\r\n"
-BOOST_AUTO_TEST_CASE(T00101_positive)
+DataSet makeDefaultSession(const std::string &url)
 {
-	gnutls_certificate_credentials_t cred = makeDefaultCred(&tpkp_gnutls_verify_callback);
-	gnutls_session_t session = makeDefaultSession();
+	DataSet data;
 
-	int ret = gnutls_credentials_set(session, GNUTLS_CRD_CERTIFICATE, cred);
+	data.cred = makeDefaultCred(&tpkp_gnutls_verify_callback);
+
+	int ret = gnutls_init(&data.session, GNUTLS_CLIENT);
+	BOOST_REQUIRE_MESSAGE(
+		ret == GNUTLS_E_SUCCESS,
+		"Failed to gnutls init session: " << gnutls_strerror(ret));
+
+	ret = gnutls_set_default_priority(data.session);
+	BOOST_REQUIRE_MESSAGE(
+		ret == GNUTLS_E_SUCCESS,
+		"Failed to set default priority on session: " << gnutls_strerror(ret));
+
+	ret = gnutls_credentials_set(data.session, GNUTLS_CRD_CERTIFICATE, data.cred);
 	BOOST_REQUIRE_MESSAGE(
 		ret == GNUTLS_E_SUCCESS,
 		"Failed to gnutls_credentials_set: " << gnutls_strerror(ret));
 
-	int sd = tcp_connect("216.58.221.36", 443);
+	connectWithUrl(url, data.sockfd);
 
 	BOOST_REQUIRE_MESSAGE(
-		tpkp_gnutls_set_url_data(targetUrl.c_str()) == TPKP_E_NONE,
+		tpkp_gnutls_set_url_data(url.c_str()) == TPKP_E_NONE,
 		"Failed to tpkp_gnutls_set_url_data.");
 
-	gnutls_transport_set_int(session, sd);
-	gnutls_handshake_set_timeout(session, GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
+	gnutls_transport_set_int(data.session, data.sockfd);
+	gnutls_handshake_set_timeout(data.session, GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
 
+	return data;
+}
+
+DataSet makeSessionWithoutPinning(const std::string &url)
+{
+	DataSet data;
+
+	int ret = gnutls_certificate_allocate_credentials(&data.cred);
+	BOOST_REQUIRE_MESSAGE(
+		ret == GNUTLS_E_SUCCESS,
+		"Failed to gnutls_certificate_allocate_credentials: " << gnutls_strerror(ret));
+
+	ret = gnutls_init(&data.session, GNUTLS_CLIENT);
+	BOOST_REQUIRE_MESSAGE(
+		ret == GNUTLS_E_SUCCESS,
+		"Failed to gnutls init session: " << gnutls_strerror(ret));
+
+	ret = gnutls_set_default_priority(data.session);
+	BOOST_REQUIRE_MESSAGE(
+		ret == GNUTLS_E_SUCCESS,
+		"Failed to set default priority on session: " << gnutls_strerror(ret));
+
+	ret = gnutls_credentials_set(data.session, GNUTLS_CRD_CERTIFICATE, data.cred);
+	BOOST_REQUIRE_MESSAGE(
+		ret == GNUTLS_E_SUCCESS,
+		"Failed to gnutls_credentials_set: " << gnutls_strerror(ret));
+
+	connectWithUrl(url, data.sockfd);
+
+	gnutls_transport_set_int(data.session, data.sockfd);
+	gnutls_handshake_set_timeout(data.session, GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
+
+	return data;
+}
+
+DataSet makeDefaultSessionGlobal(const std::string &url)
+{
+	int ret = gnutls_global_init();
+	BOOST_REQUIRE_MESSAGE(
+		ret == GNUTLS_E_SUCCESS,
+		"Failed to gnutls global init: " << gnutls_strerror(ret));
+
+	return makeDefaultSession(url);
+}
+
+void performHandshake(DataSet &data)
+{
+	int ret;
 	do {
-		ret = gnutls_handshake(session);
+		ret = gnutls_handshake(data.session);
 	} while (ret != GNUTLS_E_SUCCESS && gnutls_error_is_fatal(ret) == 0);
 
 	BOOST_REQUIRE_MESSAGE(
 		ret == GNUTLS_E_SUCCESS,
-		"Handshake failed: " << gnutls_strerror(ret));
+		"Handshake failed! err code: " << ret << " desc: " << gnutls_strerror(ret));
+}
 
-	gnutls_bye(session, GNUTLS_SHUT_RDWR);
+void cleanup(DataSet &data)
+{
+	gnutls_bye(data.session, GNUTLS_SHUT_RDWR);
+	close(data.sockfd);
+	gnutls_certificate_free_credentials(data.cred);
+	gnutls_deinit(data.session);
 
-    tcp_close(sd);
+	tpkp_gnutls_cleanup();
+}
 
-    gnutls_certificate_free_credentials(cred);
+void cleanupGlobal(DataSet &data)
+{
+	cleanup(data);
+	gnutls_global_deinit();
+}
 
-    gnutls_deinit(session);
-    gnutls_global_deinit();
+void perform(const std::string &url)
+{
+	DataSet data = makeDefaultSession(url);
+	performHandshake(data);
+	cleanup(data);
+}
+
+void performWithoutPinning(const std::string &url)
+{
+	DataSet data = makeSessionWithoutPinning(url);
+	performHandshake(data);
+	cleanup(data);
+}
+
+}
+
+BOOST_AUTO_TEST_SUITE(TPKP_GNUTLS_TEST)
+
+BOOST_AUTO_TEST_CASE(T00101_positive_1)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[0]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00102_positive_2)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[1]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00103_positive_3)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[2]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00104_positive_4)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[3]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00105_positive_5)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[4]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00106_positive_6)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[5]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00107_positive_7)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[6]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00108_positive_8)
+{
+	gnutls_global_init();
+
+	perform(s_urlList[7]);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00109_positive_all_single_thread)
+{
+	gnutls_global_init();
+
+	for (const auto &url : s_urlList)
+		perform(url);
+
+	gnutls_global_deinit();
+}
+
+BOOST_AUTO_TEST_CASE(T00110_positive_all_single_thread_without_pinning)
+{
+	gnutls_global_init();
+
+	for (const auto &url : s_urlList)
+		performWithoutPinning(url);
+
+	gnutls_global_deinit();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

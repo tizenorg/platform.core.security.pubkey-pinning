@@ -39,18 +39,27 @@ std::mutex s_mutex;
 inline int err_tpkp_to_gnutlse(tpkp_e err) noexcept
 {
 	switch (err) {
-	case TPKP_E_NONE:                    return GNUTLS_E_SUCCESS;
-	case TPKP_E_MEMORY:                  return GNUTLS_E_MEMORY_ERROR;
-	case TPKP_E_INVALID_URL:             return GNUTLS_E_INVALID_SESSION;
-	case TPKP_E_NO_URL_DATA:             return GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE;
-	case TPKP_E_PUBKEY_MISMATCH:         return GNUTLS_E_CERTIFICATE_KEY_MISMATCH;
+	case TPKP_E_NONE:                     return GNUTLS_E_SUCCESS;
+	case TPKP_E_MEMORY:                   return GNUTLS_E_MEMORY_ERROR;
+	case TPKP_E_INVALID_URL:              return GNUTLS_E_INVALID_SESSION;
+	case TPKP_E_NO_URL_DATA:              return GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE;
+	case TPKP_E_PUBKEY_MISMATCH:          return GNUTLS_E_CERTIFICATE_KEY_MISMATCH;
 	case TPKP_E_INVALID_CERT:
 	case TPKP_E_INVALID_PEER_CERT_CHAIN:
-	case TPKP_E_FAILED_GET_PUBKEY_HASH:  return GNUTLS_E_PK_SIG_VERIFY_FAILED;
+	case TPKP_E_FAILED_GET_PUBKEY_HASH:   return GNUTLS_E_PK_SIG_VERIFY_FAILED;
+	case TPKP_E_CERT_VERIFICATION_FAILED: return GNUTLS_E_CERTIFICATE_ERROR;
 	case TPKP_E_STD_EXCEPTION:
 	case TPKP_E_INTERNAL:
-	default:                             return GNUTLS_E_INTERNAL_ERROR;
+	default:                              return GNUTLS_E_INTERNAL_ERROR;
 	}
+}
+
+using GnutlsX509Ptr = std::unique_ptr<gnutls_x509_crt_t, void(*)(gnutls_x509_crt_t *)>;
+inline GnutlsX509Ptr createGnutlsX509Ptr(void)
+{
+	return GnutlsX509Ptr(new gnutls_x509_crt_t, [](gnutls_x509_crt_t *ptr) {
+		if (!!ptr) gnutls_x509_crt_deinit(*ptr);
+	});
 }
 
 TPKP::RawBuffer getPubkeyHash(gnutls_x509_crt_t cert, TPKP::HashAlgo algo)
@@ -117,6 +126,51 @@ TPKP::RawBuffer getPubkeyHash(gnutls_x509_crt_t cert, TPKP::HashAlgo algo)
 	return out;
 }
 
+GnutlsX509Ptr d2iCert(const gnutls_datum_t *datum)
+{
+	auto crtPtr = createGnutlsX509Ptr();
+
+	TPKP_CHECK_THROW_EXCEPTION(
+		gnutls_x509_crt_init(crtPtr.get()) == GNUTLS_E_SUCCESS,
+		TPKP_E_INTERNAL, "Failed to gnutls_x509_crt_init.");
+	TPKP_CHECK_THROW_EXCEPTION(
+		gnutls_x509_crt_import(*crtPtr, datum, GNUTLS_X509_FMT_DER) >= 0,
+		TPKP_E_INTERNAL, "Failed to import DER to gnutls crt");
+
+	return crtPtr;
+}
+
+/*
+ *  Need not to gnutls_x509_crt_deinit for returned value unless GNUTLS_TL_GET_COPY
+ *  flag is used.
+ *  Refer API description of gnutls_certificate_get_issuer.
+ *
+ *  gnutls_certificate_get_issuer will return the issuer of a given certificate.
+ *  As with gnutls_x509_trust_list_get_issuer() this functions requires the
+ *  GNUTLS_TL_GET_COPY flag in order to operate with PKCS11 trust list. In
+ *  that case the issuer must be freed using gnutls_x509_crt_init().
+ */
+gnutls_x509_crt_t getIssuer(gnutls_session_t session, gnutls_x509_crt_t cert)
+{
+	gnutls_certificate_credentials_t cred;
+	TPKP_CHECK_THROW_EXCEPTION(
+		gnutls_credentials_get(session, GNUTLS_CRD_CERTIFICATE, (void **)&cred)
+			== GNUTLS_E_SUCCESS,
+		TPKP_E_INTERNAL, "Failed to get credential on session");
+
+	gnutls_x509_crt_t issuer;
+	TPKP_CHECK_THROW_EXCEPTION(
+		gnutls_x509_crt_init(&issuer) == GNUTLS_E_SUCCESS,
+		TPKP_E_INTERNAL, "Failed to gnutls_x509_crt_init");
+
+	TPKP_CHECK_THROW_EXCEPTION(
+		gnutls_certificate_get_issuer(cred, cert, &issuer, 0) == GNUTLS_E_SUCCESS,
+		TPKP_E_INTERNAL,
+		"Failed to get issuer! It's internal error because verify peer2 success already");
+
+	return issuer;
+}
+
 }
 
 EXPORT_API
@@ -125,19 +179,23 @@ int tpkp_gnutls_verify_callback(gnutls_session_t session)
 	tpkp_e res = TPKP::ExceptionSafe([&]{
 		gnutls_certificate_type_t type = gnutls_certificate_type_get(session);
 		if (type != GNUTLS_CRT_X509) {
-			//
-			// TODO: what should we do if it's not x509 type cert?
-			// for now, just return 0 which means verification success
-			//
+			/*
+			 * TODO: what should we do if it's not x509 type cert?
+			 * for now, just return 0 which means verification success
+			 */
 			SLOGW("Certificate type of session isn't X509. skipt for now...");
 			return;
 		}
 
-		unsigned int listSize = 0;
-		const gnutls_datum_t *certChain = gnutls_certificate_get_peers(session, &listSize);
-		TPKP_CHECK_THROW_EXCEPTION(certChain != nullptr && listSize != 0,
-			TPKP_E_INVALID_PEER_CERT_CHAIN,
-			"no certificate from peer!");
+		unsigned int status = 0;
+		int res = gnutls_certificate_verify_peers2(session, &status);
+		TPKP_CHECK_THROW_EXCEPTION(res == GNUTLS_E_SUCCESS,
+			TPKP_E_CERT_VERIFICATION_FAILED,
+			"Failed to certificate verify peers2.. res: " << gnutls_strerror(res));
+
+		TPKP_CHECK_THROW_EXCEPTION(status == 0,
+			TPKP_E_CERT_VERIFICATION_FAILED,
+			"Peer certificate verification failed!! status: " << status);
 
 		auto tid = TPKP::getThreadId();
 		std::string url;
@@ -160,27 +218,27 @@ int tpkp_gnutls_verify_callback(gnutls_session_t session)
 			return;
 		}
 
+		unsigned int listSize = 0;
+		const gnutls_datum_t *certChain = gnutls_certificate_get_peers(session, &listSize);
+		TPKP_CHECK_THROW_EXCEPTION(certChain != nullptr && listSize != 0,
+			TPKP_E_INVALID_PEER_CERT_CHAIN,
+			"no certificate from peer!");
+
 		for (unsigned int i = 0; i < listSize; i++) {
-			std::unique_ptr<gnutls_x509_crt_t, void(*)(gnutls_x509_crt_t *)>
-				crtPtr(new gnutls_x509_crt_t, [](gnutls_x509_crt_t *ptr)->void
-					{
-						if (ptr != nullptr)
-							gnutls_x509_crt_deinit(*ptr);
-					});
-
-			TPKP_CHECK_THROW_EXCEPTION(
-				gnutls_x509_crt_init(crtPtr.get()) == GNUTLS_E_SUCCESS,
-				TPKP_E_INTERNAL,
-				"Failed to gnutls_x509_crt_init.");
-
-			TPKP_CHECK_THROW_EXCEPTION(
-				gnutls_x509_crt_import(*crtPtr, certChain++, GNUTLS_X509_FMT_DER) >= 0,
-				TPKP_E_INVALID_CERT,
-				"Failed to import DER cert to gnutls crt");
+			auto crtPtr = d2iCert(certChain++);
 
 			ctx.addPubkeyHash(
 				TPKP::HashAlgo::SHA1,
 				getPubkeyHash(*crtPtr, TPKP::HashAlgo::SHA1));
+
+			/* add additional root CA cert for last one */
+			if (i == listSize - 1) {
+				auto issuer = getIssuer(session, *crtPtr);
+
+				ctx.addPubkeyHash(
+					TPKP::HashAlgo::SHA1,
+					getPubkeyHash(issuer, TPKP::HashAlgo::SHA1));
+			}
 		}
 
 		TPKP_CHECK_THROW_EXCEPTION(ctx.checkPubkeyPins(),
