@@ -57,6 +57,17 @@ inline std::string _toLower(const std::string &host)
 	return lowerHost;
 }
 
+std::string prependHttps(const std::string &url)
+{
+	const std::string separator = "://";
+	auto pos = url.find(separator);
+
+	if (pos != std::string::npos)
+		return url;
+
+	return std::string("https") + separator + url;
+}
+
 } // anonymous namespace
 
 namespace TPKP {
@@ -112,7 +123,6 @@ public:
 	bool hasPins(void);
 
 private:
-	std::string m_url;
 	std::string m_host;
 	net::PreloadResult m_preloaded;
 	HashValueVector m_hashes;
@@ -129,14 +139,16 @@ private:
 	};
 };
 
-Context::Impl::Impl(const std::string &url) : m_url(url)
+Context::Impl::Impl(const std::string &url)
 {
 	url::Parsed parsed;
-	url::ParseStandardURL(m_url.c_str(), m_url.length(), &parsed);
-	TPKP_CHECK_THROW_EXCEPTION(parsed.host.is_valid(),
-		TPKP_E_INVALID_URL, "Failed to parse url: " << url);
+	auto newUrl = prependHttps(url);
 
-	m_host = _toLower(m_url.substr(
+	url::ParseStandardURL(newUrl.c_str(), newUrl.length(), &parsed);
+	TPKP_CHECK_THROW_EXCEPTION(parsed.host.is_valid(),
+		TPKP_E_INVALID_URL, "Failed to parse url: " << newUrl);
+
+	m_host = _toLower(newUrl.substr(
 			static_cast<size_t>(parsed.host.begin),
 			static_cast<size_t>(parsed.host.len)));
 
