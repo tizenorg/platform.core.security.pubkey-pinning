@@ -9,6 +9,7 @@ License:    Apache-2.0 and BSD-2.0 and MPL-1.1
 Source0:    %name-%version.tar.gz
 Source1:    %name.manifest
 BuildRequires: cmake
+BuildRequires: gettext-tools
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(dlog)
 BuildRequires: pkgconfig(libxml-2.0)
@@ -16,6 +17,7 @@ BuildRequires: pkgconfig(libiri)
 BuildRequires: pkgconfig(libcurl)
 BuildRequires: pkgconfig(gnutls)
 BuildRequires: pkgconfig(openssl)
+BuildRequires: pkgconfig(elementary)
 
 %description
 Https Public Key Pinning for Tizen platform system framework.
@@ -66,11 +68,12 @@ make %{?_smp_mflags}
 
 %install
 %make_install
+%find_lang %{name}
 
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
-%files
+%files -f %{name}.lang
 %manifest %name.manifest
 %license LICENSE
 %license LICENSE.BSD-3-Clause
@@ -78,6 +81,7 @@ make %{?_smp_mflags}
 %_libdir/libtpkp-common.so.*
 %_libdir/libtpkp-curl.so.*
 %_libdir/libtpkp-gnutls.so.*
+%_bindir/tpkp-popup
 
 %files devel
 %_includedir/tpkp/common/tpkp_error.h
