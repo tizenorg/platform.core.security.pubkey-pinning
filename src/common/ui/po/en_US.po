@@ -1,0 +1,11 @@
+msgid "SID_TITLE_PUBLIC_KEY_MISMATCHED"
+msgstr "Pinned public key is mismatch with the server"
+
+msgid "SID_CONTENT_PUBLIC_KEY_MISMATCHED"
+msgstr "Pinned public key is mismatch with the server. Hoh!"
+
+msgid "SID_BTN_ALLOW"
+msgstr "allow"
+
+msgid "SID_BTN_DENY"
+msgstr "deny"

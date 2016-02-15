@@ -19,6 +19,7 @@
  * @version     1.0
  * @brief       Https Public Key Pinning common implementation.
  */
+#include "tpkp_common.h"
 
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -32,8 +33,7 @@
 #include "net/http/transport_security_state.h"
 #include "net/http/transport_security_state_static.h"
 #include "url/third_party/mozilla/url_parse.h"
-
-#include "tpkp_common.h"
+#include "ui/popup_runner.h"
 
 namespace {
 
@@ -66,6 +66,25 @@ std::string prependHttps(const std::string &url)
 		return url;
 
 	return std::string("https") + separator + url;
+}
+
+bool askUser(const std::string &host)
+{
+	SLOGD("Ask to user to access host[%s]", host.c_str());
+
+	TPKP::UI::Response response = TPKP::UI::runPopup(host);
+
+	switch (response) {
+	case TPKP::UI::Response::ALLOW:
+		SLOGI("ALLOW returned from tpkp-popup");
+		return true;
+	case TPKP::UI::Response::DENY:
+		SLOGI("DENY returned from tpkp-popup");
+		return false;
+	default:
+		SLOGE("Unknown response returned[%d] from tpkp-popup", static_cast<int>(response));
+		return false;
+	}
 }
 
 } // anonymous namespace
@@ -179,12 +198,12 @@ bool Context::Impl::checkPubkeyPins(void)
 
 	if (HashesIntersect(pinset.rejected_pins)) {
 		SLOGE("pubkey is in rejected pin!");
-		return false;
+		return askUser(m_host);
 	}
 
 	if (!HashesIntersect(pinset.accepted_pins)) {
 		SLOGE("pubkey cannot be found in accepted pins!");
-		return false;
+		return askUser(m_host);
 	}
 
 	SLOGD("pubkey is pinned one!");
