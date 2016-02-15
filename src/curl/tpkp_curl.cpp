@@ -33,6 +33,8 @@
 
 namespace {
 
+using Decision = TPKP::ClientCache::Decision;
+
 TPKP::ClientCache g_cache;
 
 inline CURLcode err_tpkp_to_curle(tpkp_e err) noexcept
@@ -102,6 +104,19 @@ int tpkp_curl_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 		TPKP_CHECK_THROW_EXCEPTION(!url.empty(),
 			TPKP_E_NO_URL_DATA, "No url in client cache!!");
 
+		switch (g_cache.getDecision(url)) {
+		case Decision::ALLOWED:
+			SLOGD("allow decision exist on url[%s]", url.c_str());
+			return;
+
+		case Decision::DENIED:
+			TPKP_THROW_EXCEPTION(TPKP_E_PUBKEY_MISMATCH,
+				"deny decision exist on url: " << url);
+
+		default:
+			break; /* go ahead to make decision */
+		}
+
 		TPKP::Context ctx(url);
 		if (!ctx.hasPins()) {
 			SLOGI("Skip. No static pin data for url: %s", url.c_str());
@@ -119,7 +134,12 @@ int tpkp_curl_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 				TPKP::HashAlgo::SHA1,
 				getPubkeyHash(sk_X509_value(chain, i), TPKP::HashAlgo::SHA1));
 
-		TPKP_CHECK_THROW_EXCEPTION(ctx.checkPubkeyPins(),
+		bool isMatched = ctx.checkPubkeyPins();
+
+		/* update decision cache */
+		g_cache.setDecision(url, isMatched ? Decision::ALLOWED : Decision::DENIED);
+
+		TPKP_CHECK_THROW_EXCEPTION(isMatched,
 			TPKP_E_PUBKEY_MISMATCH, "The pubkey mismatched with pinned data!");
 	});
 

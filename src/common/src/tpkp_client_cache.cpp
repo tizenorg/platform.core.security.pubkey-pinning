@@ -26,6 +26,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include "tpkp_parser.h"
 #include "tpkp_logger.h"
 
 namespace {
@@ -85,6 +86,29 @@ void ClientCache::eraseUrlAll(void)
 	m_urls.clear();
 
 	SLOGD("erase all urls saved of client");
+}
+
+void ClientCache::setDecision(const std::string &url, ClientCache::Decision decision)
+{
+	auto hostname = Parser::extractHostname(url);
+
+	{
+		std::lock_guard<std::mutex> lock(m_decision_mutex);
+		m_decisions[hostname] = ClientCache::DecisionStruct(decision);
+	}
+}
+
+ClientCache::Decision ClientCache::getDecision(const std::string &url)
+{
+	ClientCache::Decision decision;
+	auto hostname = Parser::extractHostname(url);
+
+	{
+		std::lock_guard<std::mutex> lock(m_decision_mutex);
+		decision = m_decisions[hostname].decision;
+	}
+
+	return decision;
 }
 
 }

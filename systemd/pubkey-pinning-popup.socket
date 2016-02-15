@@ -1,0 +1,7 @@
+[Socket]
+ListenStream=/tmp/.tpkp-ui-backend.sock
+SocketMode=0777
+Service=pubkey-pinning-popup.service
+
+[Install]
+WantedBy=sockets.target
