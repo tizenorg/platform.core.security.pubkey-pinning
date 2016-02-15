@@ -50,4 +50,42 @@ TARGET_LINK_LIBRARIES(${TARGET_TPKP_TEST}
 	boost_unit_test_framework
 	)
 
-INSTALL(TARGETS ${TARGET_TPKP_TEST} DESTINATION bin)
+# run popup test
+PKG_CHECK_MODULES(TEST_TPKP_POPUP_DEP
+	REQUIRED
+	dlog
+	)
+
+INCLUDE_DIRECTORIES(
+	SYSTEM
+	${TEST_TPKP_POPUP_DEP_INCLUDE_DIRS}
+	${PROJECT_SOURCE_DIR}/src/common/include
+	${PROJECT_SOURCE_DIR}/src/common
+	)
+
+SET(TEST_POPUP_SRCS
+	${PROJECT_SOURCE_DIR}/src/common/url/url_constants.cc
+	${PROJECT_SOURCE_DIR}/src/common/url/url_util.cc
+	${PROJECT_SOURCE_DIR}/src/common/url/url_parse.cc
+	${PROJECT_SOURCE_DIR}/src/common/url/url_parse_file.cc
+	${PROJECT_SOURCE_DIR}/src/common/net/http/transport_security_state.cpp
+	${PROJECT_SOURCE_DIR}/src/common/src/tpkp_common.cpp
+	${PROJECT_SOURCE_DIR}/src/common/src/tpkp_parser.cpp
+	${PROJECT_SOURCE_DIR}/src/common/ui/popup_runner.cpp
+	${PROJECT_SOURCE_DIR}/src/common/ui/popup_common.cpp
+	${PROJECT_SOURCE_DIR}/src/common/ui/serialization.cpp
+	${PROJECT_SOURCE_DIR}/src/common/ui/connection.cpp
+	colour_log_formatter.cpp
+	colors.cpp
+	popup_test_main.cpp
+	popup_runner_test.cpp
+	)
+
+ADD_EXECUTABLE(${TARGET_TPKP_POPUP_TEST} ${TEST_POPUP_SRCS})
+
+TARGET_LINK_LIBRARIES(${TARGET_TPKP_POPUP_TEST}
+	${TEST_TPKP_POPUP_DEP_LIBRARIES}
+	boost_unit_test_framework
+	)
+
+INSTALL(TARGETS ${TARGET_TPKP_TEST} ${TARGET_TPKP_POPUP_TEST} DESTINATION bin)

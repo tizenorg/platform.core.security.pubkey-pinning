@@ -37,6 +37,10 @@ SET(TPKP_COMMON_SRCS
 	src/tpkp_common.cpp
 	src/tpkp_parser.cpp
 	src/tpkp_client_cache.cpp
+	ui/popup_common.cpp
+	ui/popup_runner.cpp
+	ui/serialization.cpp
+	ui/connection.cpp
 	)
 
 ADD_LIBRARY(${TARGET_TPKP_COMMON_LIB} SHARED ${TPKP_COMMON_SRCS})
@@ -52,3 +56,5 @@ TARGET_LINK_LIBRARIES(${TARGET_TPKP_COMMON_LIB} ${TPKP_COMMON_DEP_LIBRARIES})
 
 INSTALL(TARGETS ${TARGET_TPKP_COMMON_LIB} DESTINATION ${LIB_INSTALL_DIR})
 INSTALL(FILES include/tpkp_error.h DESTINATION ${INCLUDEDIR}/tpkp/common)
+
+ADD_SUBDIRECTORY(ui)

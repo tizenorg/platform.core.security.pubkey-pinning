@@ -31,6 +31,7 @@
 #include "net/http/transport_security_state_static.h"
 
 #include "tpkp_parser.h"
+#include "ui/popup_runner.h"
 
 namespace {
 
@@ -96,6 +97,7 @@ private:
 
 	bool LoadPreloadedPins(void);
 	bool HashesIntersect(const char *const *hashesArr);
+	bool askUser(void);
 
 	class HashValuesEqual {
 	public:
@@ -137,12 +139,12 @@ bool Context::Impl::checkPubkeyPins(void)
 
 	if (HashesIntersect(pinset.rejected_pins)) {
 		SLOGE("pubkey is in rejected pin!");
-		return false;
+		return askUser();
 	}
 
 	if (!HashesIntersect(pinset.accepted_pins)) {
 		SLOGE("pubkey cannot be found in accepted pins!");
-		return false;
+		return askUser();
 	}
 
 	SLOGD("pubkey is pinned one!");
@@ -205,6 +207,23 @@ bool Context::Impl::HashValuesEqual::operator()(const HashValue &other) const
 	}
 
 	return true;
+}
+
+bool Context::Impl::askUser(void)
+{
+	TPKP::UI::Response response = TPKP::UI::runPopup(m_host);
+
+	switch (response) {
+	case TPKP::UI::Response::ALLOW:
+		SLOGI("ALLOW returned from tpkp-popup");
+		return true;
+	case TPKP::UI::Response::DENY:
+		SLOGI("DENY returned from tpkp-popup");
+		return false;
+	default:
+		SLOGE("Unknown response returned[%d] from tpkp-popup", static_cast<int>(response));
+		return false;
+	}
 }
 
 Context::Context(const std::string &url) : pImpl(new Impl{url}) {}

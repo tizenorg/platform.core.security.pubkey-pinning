@@ -8,7 +8,13 @@ Group:      Security/Libraries
 License:    Apache-2.0 and BSD-2.0 and MPL-1.1
 Source0:    %name-%version.tar.gz
 Source1:    %name.manifest
+Requires(post): /sbin/ldconfig
+Requires(post): /usr/bin/systemctl
+Requires(postun): /sbin/ldconfig
+Requires(postun): /usr/bin/systemctl
+Requires(preun): /usr/bin/systemctl
 BuildRequires: cmake
+BuildRequires: gettext-tools
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(dlog)
 BuildRequires: pkgconfig(libxml-2.0)
@@ -16,6 +22,10 @@ BuildRequires: pkgconfig(libiri)
 BuildRequires: pkgconfig(libcurl)
 BuildRequires: pkgconfig(gnutls)
 BuildRequires: pkgconfig(openssl)
+BuildRequires: pkgconfig(elementary)
+BuildRequires: pkgconfig(libsystemd-daemon)
+BuildRequires: pkgconfig(vconf)
+%{?systemd_requires}
 
 %description
 Https Public Key Pinning for Tizen platform system framework.
@@ -60,17 +70,37 @@ export LDFLAGS+="-Wl,--rpath=%_prefix/lib"
 %if 0%{?pubkey_pinning_test_build}
         -DPUBKEY_PINNING_TEST_BUILD=1    \
 %endif
-        -DCMAKE_VERBOSE_MAKEFILE=ON
+        -DCMAKE_VERBOSE_MAKEFILE=ON \
+        -DSYSTEMD_UNIT_DIR=%_unitdir_user
 
 make %{?_smp_mflags}
 
 %install
 %make_install
+mkdir -p %buildroot%_unitdir_user/default.target.wants
+mkdir -p %buildroot%_unitdir_user/sockets.target.wants
+ln -sf ../%name-popup.service %buildroot%_unitdir_user/default.target.wants/%name-popup.service
+ln -sf ../%name-popup.socket %buildroot%_unitdir_user/sockets.target.wants/%name-popup.socket
+%find_lang %{name}
 
-%post -p /sbin/ldconfig
-%postun -p /sbin/ldconfig
+%post
+/sbin/ldconfig
+systemctl daemon-reload
+if [ $1 == 1 ]; then
+    systemctl restart %name-popup.service
+fi
 
-%files
+%preun
+if [ $1 == 0 ]; then
+    systemctl stop %name-popup.service
+    systemctl disable %name-popup
+fi
+
+%postun
+/sbin/ldconfig
+systemctl daemon-reload
+
+%files -f %{name}.lang
 %manifest %name.manifest
 %license LICENSE
 %license LICENSE.BSD-3-Clause
@@ -78,6 +108,11 @@ make %{?_smp_mflags}
 %_libdir/libtpkp-common.so.*
 %_libdir/libtpkp-curl.so.*
 %_libdir/libtpkp-gnutls.so.*
+%_unitdir_user/%name-popup.service
+%_unitdir_user/%name-popup.socket
+%_unitdir_user/default.target.wants/%name-popup.service
+%_unitdir_user/sockets.target.wants/%name-popup.socket
+%_bindir/tpkp-popup
 
 %files devel
 %_includedir/tpkp/common/tpkp_error.h
@@ -92,4 +127,5 @@ make %{?_smp_mflags}
 %if 0%{?pubkey_pinning_test_build}
 %files test
 %_bindir/tpkp-internal-test
+%_bindir/tpkp-internal-test-popup
 %endif

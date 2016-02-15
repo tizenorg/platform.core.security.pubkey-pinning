@@ -14,7 +14,7 @@
  *    limitations under the License.
  */
 /*
- * @file        libcurl_sample.cpp
+ * @file        curl_test.cpp
  * @author      Kyungwook Tak (k.tak@samsung.com)
  * @version     1.0
  * @brief       tpkp_curl unit test.
