@@ -32,6 +32,12 @@ namespace TPKP {
 
 class EXPORT_API ClientCache {
 public:
+	enum class Decision : int {
+		UNKNOWN,
+		ALLOWED,
+		DENIED
+	};
+
 	ClientCache();
 	virtual ~ClientCache();
 
@@ -41,9 +47,22 @@ public:
 	void eraseUrl(void);
 	void eraseUrlAll(void);
 
+	/* thread-globally user decision mapped to hostname extracted from url */
+	void setDecision(const std::string &url, Decision decision);
+	Decision getDecision(const std::string &url);
+
 private:
+	struct DecisionStruct {
+		Decision decision;
+		DecisionStruct() : decision(Decision::UNKNOWN) {}
+		DecisionStruct(Decision d) : decision(d) {}
+	};
+
 	std::map<pid_t, std::string> m_urls;
 	std::mutex m_url_mutex;
+
+	std::map<std::string, DecisionStruct> m_decisions;
+	std::mutex m_decision_mutex;
 };
 
 }
