@@ -35,6 +35,9 @@ SET(TPKP_COMMON_SRCS
 	url/url_parse_file.cc
 	net/http/transport_security_state.cpp
 	src/tpkp_common.cpp
+	ui/popup_common.cpp
+	ui/popup_runner.cpp
+	ui/serialization.cpp
 	)
 
 ADD_LIBRARY(${TARGET_TPKP_COMMON_LIB} SHARED ${TPKP_COMMON_SRCS})
@@ -50,3 +53,5 @@ TARGET_LINK_LIBRARIES(${TARGET_TPKP_COMMON_LIB} ${TPKP_COMMON_DEP_LIBRARIES})
 
 INSTALL(TARGETS ${TARGET_TPKP_COMMON_LIB} DESTINATION ${LIB_INSTALL_DIR})
 INSTALL(FILES include/tpkp_error.h DESTINATION ${INCLUDEDIR}/tpkp/common)
+
+ADD_SUBDIRECTORY(ui)
