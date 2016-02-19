@@ -21,9 +21,6 @@
  */
 #include "tpkp_common.h"
 
-#include <sys/syscall.h>
-#include <unistd.h>
-
 #include <cstring>
 #include <cctype>
 #include <new>
@@ -46,11 +43,6 @@ inline size_t _arraySize(const T &t)
 } // anonymous namespace
 
 namespace TPKP {
-
-pid_t getThreadId()
-{
-	return syscall(SYS_gettid);
-}
 
 Exception::Exception(tpkp_e code, const std::string &message)
 	: m_code(code)

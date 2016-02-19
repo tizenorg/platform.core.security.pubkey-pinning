@@ -19,6 +19,8 @@
  * @version     1.0
  * @brief       Tizen Https Public Key Pinning implementation for libcurl.
  */
+#include "tpkp_curl.h"
+
 #include <string>
 #include <memory>
 #include <map>
@@ -27,12 +29,11 @@
 #include <curl/curl.h>
 
 #include "tpkp_common.h"
-#include "tpkp_curl.h"
+#include "tpkp_client_cache.h"
 
 namespace {
 
-std::map<pid_t, std::string> s_urlmap;
-std::mutex s_mutex;
+TPKP::ClientCache g_cache;
 
 inline CURLcode err_tpkp_to_curle(tpkp_e err) noexcept
 {
@@ -96,18 +97,10 @@ int tpkp_curl_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 		TPKP_CHECK_THROW_EXCEPTION(preverify_ok != 0,
 			TPKP_E_INTERNAL, "verify callback already failed before enter tpkp_curl callback");
 
-		auto tid = TPKP::getThreadId();
-		std::string url;
-
-		{
-			std::lock_guard<std::mutex> lock(s_mutex);
-			url = s_urlmap[tid];
-		}
+		std::string url = g_cache.getUrl();
 
 		TPKP_CHECK_THROW_EXCEPTION(!url.empty(),
-			TPKP_E_NO_URL_DATA, "No url for thread id[" << tid << "] in map");
-
-		SLOGD("get url[%s] of thread id[%u]", url.c_str(), tid);
+			TPKP_E_NO_URL_DATA, "No url in client cache!!");
 
 		TPKP::Context ctx(url);
 		if (!ctx.hasPins()) {
@@ -140,14 +133,7 @@ tpkp_e tpkp_curl_set_url_data(CURL *curl)
 		char *url = nullptr;
 		curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
 
-		auto tid = TPKP::getThreadId();
-
-		{
-			std::lock_guard<std::mutex> lock(s_mutex);
-			s_urlmap[tid] = url;
-		}
-
-		SLOGD("set url[%s] of thread id[%u]", url, tid);
+		g_cache.setUrl(url);
 	});
 }
 
@@ -168,14 +154,7 @@ EXPORT_API
 void tpkp_curl_cleanup(void)
 {
 	tpkp_e res = TPKP::ExceptionSafe([&]{
-		auto tid = TPKP::getThreadId();
-
-		{
-			std::lock_guard<std::mutex> lock(s_mutex);
-			s_urlmap.erase(tid);
-		}
-
-		SLOGD("cleanup url data for thread id[%u]", tid);
+		g_cache.eraseUrl();
 	});
 
 	(void) res;
@@ -184,5 +163,5 @@ void tpkp_curl_cleanup(void)
 EXPORT_API
 void tpkp_curl_cleanup_all(void)
 {
-	s_urlmap.clear();
+	g_cache.eraseUrlAll();
 }

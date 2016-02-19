@@ -99,9 +99,6 @@ private:
 	std::unique_ptr<Impl> pImpl;
 };
 
-EXPORT_API
-pid_t getThreadId(void);
-
 }
 
 #define TPKP_THROW_EXCEPTION(code, message) \

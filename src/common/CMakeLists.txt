@@ -36,6 +36,7 @@ SET(TPKP_COMMON_SRCS
 	net/http/transport_security_state.cpp
 	src/tpkp_common.cpp
 	src/tpkp_parser.cpp
+	src/tpkp_client_cache.cpp
 	)
 
 ADD_LIBRARY(${TARGET_TPKP_COMMON_LIB} SHARED ${TPKP_COMMON_SRCS})

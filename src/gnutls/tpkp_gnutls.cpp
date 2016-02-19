@@ -19,6 +19,8 @@
  * @version     1.0
  * @brief       Tizen Https Public Key Pinning implementation for gnutls.
  */
+#include "tpkp_gnutls.h"
+
 #include <string>
 #include <memory>
 #include <map>
@@ -29,12 +31,11 @@
 #include <gnutls/x509.h>
 
 #include "tpkp_common.h"
-#include "tpkp_gnutls.h"
+#include "tpkp_client_cache.h"
 
 namespace {
 
-std::map<pid_t, std::string> s_urlmap;
-std::mutex s_mutex;
+TPKP::ClientCache g_cache;
 
 inline int err_tpkp_to_gnutlse(tpkp_e err) noexcept
 {
@@ -197,20 +198,12 @@ int tpkp_gnutls_verify_callback(gnutls_session_t session)
 			TPKP_E_CERT_VERIFICATION_FAILED,
 			"Peer certificate verification failed!! status: " << status);
 
-		auto tid = TPKP::getThreadId();
-		std::string url;
-
-		{
-			std::lock_guard<std::mutex> lock(s_mutex);
-			url = s_urlmap[tid];
-		}
+		std::string url = g_cache.getUrl();
 
 		TPKP_CHECK_THROW_EXCEPTION(
 			!url.empty(),
 			TPKP_E_NO_URL_DATA,
-			"No url of thread id[" << tid << "]");
-
-		SLOGD("get url[%s] of thread id[%u]", url.c_str(), tid);
+			"No url of found in client cache!!");
 
 		TPKP::Context ctx(url);
 		if (!ctx.hasPins()) {
@@ -252,14 +245,7 @@ EXPORT_API
 tpkp_e tpkp_gnutls_set_url_data(const char *url)
 {
 	return TPKP::ExceptionSafe([&]{
-		pid_t tid = TPKP::getThreadId();
-
-		{
-			std::lock_guard<std::mutex> lock(s_mutex);
-			s_urlmap[tid] = url;
-		}
-
-		SLOGD("set url[%s] of thread id[%u]", url, tid);
+		g_cache.setUrl(url);
 	});
 }
 
@@ -267,14 +253,7 @@ EXPORT_API
 void tpkp_gnutls_cleanup(void)
 {
 	tpkp_e res = TPKP::ExceptionSafe([&]{
-		auto tid = TPKP::getThreadId();
-
-		{
-			std::lock_guard<std::mutex> lock(s_mutex);
-			s_urlmap.erase(tid);
-		}
-
-		SLOGD("cleanup url data from thread id[%u]", tid);
+		g_cache.eraseUrl();
 	});
 
 	(void) res;
@@ -283,5 +262,5 @@ void tpkp_gnutls_cleanup(void)
 EXPORT_API
 void tpkp_gnutls_cleanup_all(void)
 {
-	s_urlmap.clear();
+	g_cache.eraseUrlAll();
 }
