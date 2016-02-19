@@ -19,6 +19,7 @@
  * @version     1.0
  * @brief       Https Public Key Pinning common implementation.
  */
+#include "tpkp_common.h"
 
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -31,9 +32,8 @@
 
 #include "net/http/transport_security_state.h"
 #include "net/http/transport_security_state_static.h"
-#include "url/third_party/mozilla/url_parse.h"
 
-#include "tpkp_common.h"
+#include "tpkp_parser.h"
 
 namespace {
 
@@ -41,31 +41,6 @@ template <typename T>
 inline size_t _arraySize(const T &t)
 {
 	return sizeof(t) / sizeof(*t);
-}
-
-inline std::string _toLower(const std::string &host)
-{
-	std::string lowerHost;
-	std::for_each(
-		host.begin(),
-		host.end(),
-		[&lowerHost](const std::string::value_type &ch)
-		{
-			lowerHost.push_back(std::tolower(ch));
-		});
-
-	return lowerHost;
-}
-
-std::string prependHttps(const std::string &url)
-{
-	const std::string separator = "://";
-	auto pos = url.find(separator);
-
-	if (pos != std::string::npos)
-		return url;
-
-	return std::string("https") + separator + url;
 }
 
 } // anonymous namespace
@@ -141,16 +116,7 @@ private:
 
 Context::Impl::Impl(const std::string &url)
 {
-	url::Parsed parsed;
-	auto newUrl = prependHttps(url);
-
-	url::ParseStandardURL(newUrl.c_str(), newUrl.length(), &parsed);
-	TPKP_CHECK_THROW_EXCEPTION(parsed.host.is_valid(),
-		TPKP_E_INVALID_URL, "Failed to parse url: " << newUrl);
-
-	m_host = _toLower(newUrl.substr(
-			static_cast<size_t>(parsed.host.begin),
-			static_cast<size_t>(parsed.host.len)));
+	m_host = Parser::extractHostname(url);
 
 	SLOGD("HPKP ready to check on host[%s]", m_host.c_str());
 
