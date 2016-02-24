@@ -1,5 +1,5 @@
 msgid "SID_TITLE_PUBLIC_KEY_MISMATCHED"
-msgstr "[Warning] Untrusted server host!"
+msgstr "Untrusted host"
 
 msgid "SID_CONTENT_PUBLIC_KEY_MISMATCHED"
 msgstr "Pinned public key to the host[%s] isn't matched!"
