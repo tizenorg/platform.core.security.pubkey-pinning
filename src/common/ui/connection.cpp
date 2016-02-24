@@ -43,14 +43,14 @@ SockRaii::~SockRaii()
 void SockRaii::connect(const std::string &interface)
 {
 	TPKP_CHECK_THROW_EXCEPTION(!interface.empty(),
-		TPKP_E_INTERNAL, "No valid interface address given.");
+		TPKP_E_INVALID_PARAMETER, "No valid interface address given.");
 
 	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
 
 	SLOGD("make client sock: %d", sock);
 
 	TPKP_CHECK_THROW_EXCEPTION(sock >= 0,
-		TPKP_E_INTERNAL, "Error to create sock");
+		TPKP_E_IO, "Error to create sock");
 
 	connectWrapper(sock, interface);
 
@@ -62,27 +62,25 @@ void SockRaii::connectWrapper(int sock, const std::string &interface)
 {
 	sockaddr_un clientaddr;
 
-	/*
-	 * TODO(k.tak): add more error codes (at least internal) to represent
-	 *              various error cases
-	 */
 	TPKP_CHECK_THROW_EXCEPTION(
 		interface.length() < sizeof(clientaddr.sun_path),
-		TPKP_E_INTERNAL, "Error: interface name[" << interface << "] is too long");
+		TPKP_E_INVALID_PARAMETER,
+		"Error: interface name[" << interface << "] is too long");
 
 	memset(&clientaddr, 0, sizeof(clientaddr));
 	clientaddr.sun_family = AF_UNIX;
 	strcpy(clientaddr.sun_path, interface.c_str());
 
-	int ret = TEMP_FAILURE_RETRY(::connect(sock, (struct sockaddr *)&clientaddr, SUN_LEN(&clientaddr)));
+	int ret = TEMP_FAILURE_RETRY(
+			::connect(sock, (struct sockaddr *)&clientaddr, SUN_LEN(&clientaddr)));
 
 	const int err = errno;
 	if (ret == -1) {
 		if (err == EACCES)
-			TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL,
+			TPKP_THROW_EXCEPTION(TPKP_E_PERMISSION_DENIED,
 				"Access denied to interface: " << interface);
 
-		TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL,
+		TPKP_THROW_EXCEPTION(TPKP_E_IO,
 			"Error on connect socket. errno: " << err);
 	}
 }
@@ -117,9 +115,9 @@ void SockRaii::waitForStreamIn(int timeout)
 	}
 
 	if (ret == 0)
-		TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL, "Poll timeout[" << timeout << "]!!");
+		TPKP_THROW_EXCEPTION(TPKP_E_TIMEOUT, "Poll timeout[" << timeout << "]!!");
 	else if (ret == -1)
-		TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL, "Error in poll! errno: " << errno);
+		TPKP_THROW_EXCEPTION(TPKP_E_IO, "Error in poll! errno: " << errno);
 }
 
 int SockRaii::get(void) const
@@ -147,7 +145,7 @@ void ServiceConnection::send(const BinaryStream &stream)
 BinaryStream ServiceConnection::receive(void)
 {
 	TPKP_CHECK_THROW_EXCEPTION(m_socket.isConnected(),
-		TPKP_E_INTERNAL, "Not connected!");
+		TPKP_E_IO, "Not connected!");
 
 	m_socket.waitForStreamIn(m_timeout);
 

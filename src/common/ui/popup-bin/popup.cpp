@@ -97,7 +97,7 @@ void answerAllowCb(void *data, Evas_Object * /* obj */, void * /* event_info */)
 	SLOGD("allow answer");
 
 	TPKP_CHECK_THROW_EXCEPTION(data != nullptr,
-		TPKP_E_INTERNAL, "data shouldn't be null on evas callbacks");
+		TPKP_E_INVALID_PARAMETER, "data shouldn't be null on evas callbacks");
 
 	TpkpPopup *pdp = static_cast<TpkpPopup *>(data);
 	pdp->result = Response::ALLOW;
@@ -110,7 +110,7 @@ void answerDenyCb(void *data, Evas_Object * /* obj */, void * /* event_info */)
 	SLOGD("deny answer");
 
 	TPKP_CHECK_THROW_EXCEPTION(data != nullptr,
-		TPKP_E_INTERNAL, "data shouldn't be null on evas callbacks");
+		TPKP_E_INVALID_PARAMETER, "data shouldn't be null on evas callbacks");
 
 	TpkpPopup *pdp = static_cast<TpkpPopup *>(data);
 	pdp->result = Response::DENY;
@@ -121,7 +121,7 @@ void answerDenyCb(void *data, Evas_Object * /* obj */, void * /* event_info */)
 Eina_Bool timeoutCb(void *data)
 {
 	TPKP_CHECK_THROW_EXCEPTION(data != nullptr,
-		TPKP_E_INTERNAL, "data shouldn't be null on timeout callback");
+		TPKP_E_INVALID_PARAMETER, "data shouldn't be null on timeout callback");
 	TpkpPopup *pdp = static_cast<TpkpPopup *>(data);
 	pdp->result = Response::DENY;
 
@@ -138,7 +138,8 @@ std::unique_ptr<char> getPopupContentString(TpkpPopup *pdp)
 	char *content = nullptr;
 
 	if (asprintf(&content, contentFormat, pdp->hostname.c_str()) == -1)
-		TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL, "Failed to alloc memory for popup text");
+		TPKP_THROW_EXCEPTION(TPKP_E_MEMORY,
+			"Failed to alloc memory for popup text");
 
 	return std::unique_ptr<char>(content);
 }
@@ -167,7 +168,7 @@ void showPopup(TpkpPopup *pdp)
 	SLOGD("Start to make popup");
 
 	TPKP_CHECK_THROW_EXCEPTION(pdp != nullptr,
-		TPKP_E_INTERNAL, "pdp shouldn't be null");
+		TPKP_E_INVALID_PARAMETER, "pdp shouldn't be null");
 
 	/* create win */
 	Evas_Object *win = elm_win_add(nullptr, "tpkp popup", ELM_WIN_NOTIFICATION);
@@ -182,7 +183,8 @@ void showPopup(TpkpPopup *pdp)
 	Evas_Object *popup = elm_popup_add(win);
 	evas_object_size_hint_weight_set(popup, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
 	elm_object_text_set(popup, contentString.get());
-	elm_object_part_text_set(popup, "title,text", dgettext(PROJECT_NAME, "SID_TITLE_PUBLIC_KEY_MISMATCHED"));
+	elm_object_part_text_set(popup, "title,text",
+			dgettext(PROJECT_NAME, "SID_TITLE_PUBLIC_KEY_MISMATCHED"));
 	evas_object_show(popup);
 
 	/* create allow button */
@@ -201,9 +203,8 @@ void showPopup(TpkpPopup *pdp)
 	evas_object_smart_callback_add(buttonDeny, "clicked", answerDenyCb, pdp);
 	evas_object_show(buttonDeny);
 
-	if (pdp->timeout > 0) {
+	if (pdp->timeout > 0)
 		ecore_timer_add(pdp->timeout / 1000, timeoutCb, pdp);
-	}
 
 	pdp->win = win;
 
@@ -246,7 +247,7 @@ int getSockFromSystemd(void)
 			return fd;
 		}
 	}
-	TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL, "Failed to get sock from systemd.");
+	TPKP_THROW_EXCEPTION(TPKP_E_IO, "Failed to get sock from systemd.");
 }
 
 } // namespace anonymous
@@ -273,10 +274,9 @@ int main(int argc, char **argv)
 		while (true) {
 			/* non blocking poll */
 			int ret = poll(fds, 1, 0);
-			TPKP_CHECK_THROW_EXCEPTION(ret >= 0,
-				TPKP_E_INTERNAL, "poll() error. errno: " << errno);
-
-			if (ret == 0) {
+			if (ret < 0) {
+				TPKP_THROW_EXCEPTION(TPKP_E_IO, "poll() error. errno: " << errno);
+			} else if (ret == 0) {
 				SLOGD("tpkp-popup backend service timeout. Let's be deactivated");
 				return 0;
 			}
@@ -286,7 +286,7 @@ int main(int argc, char **argv)
 			memset(&clientaddr, 0, client_len);
 
 			int clientFd = accept(fds[0].fd, (struct sockaddr *)&clientaddr, (socklen_t *)&client_len);
-			TPKP_CHECK_THROW_EXCEPTION(clientFd >= 0, TPKP_E_INTERNAL, "Error in func accept()");
+			TPKP_CHECK_THROW_EXCEPTION(clientFd >= 0, TPKP_E_IO, "Error in func accept()");
 			SLOGD("client accepted with fd: %d", clientFd);
 
 			SockRaii clientSock(clientFd);
