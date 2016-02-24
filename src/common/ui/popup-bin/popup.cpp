@@ -58,12 +58,6 @@ struct TpkpPopup {
 
 	/* internal data fields */
 	Evas_Object *win;
-	Evas_Object *popup;
-	Evas_Object *box;
-	Evas_Object *title;
-	Evas_Object *content;
-	Evas_Object *buttonAllow;
-	Evas_Object *buttonDeny;
 
 	/* output */
 	TPKP::UI::Response result;
@@ -72,12 +66,6 @@ struct TpkpPopup {
 		hostname(),
 		timeout(-1),
 		win(nullptr),
-		popup(nullptr),
-		box(nullptr),
-		title(nullptr),
-		content(nullptr),
-		buttonAllow(nullptr),
-		buttonDeny(nullptr),
 		result(TPKP::UI::Response::ERROR) {}
 };
 
@@ -148,6 +136,17 @@ Eina_Bool timeoutCb(void *data)
 	return ECORE_CALLBACK_CANCEL;
 }
 
+std::unique_ptr<char> getPopupContentString(TpkpPopup *pdp)
+{
+	char *contentFormat = dgettext(PROJECT_NAME, "SID_CONTENT_PUBLIC_KEY_MISMATCHED");
+	char *content = nullptr;
+
+	if (asprintf(&content, contentFormat, pdp->hostname.c_str()) == -1)
+		TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL, "Failed to alloc memory for popup text");
+
+	return std::unique_ptr<char>(content);
+}
+
 /*
  *  popup layout
  *
@@ -156,17 +155,17 @@ Eina_Bool timeoutCb(void *data)
  *  |                              |
  *  |            popup             |
  *  | ---------------------------- |
+ *  | |          title           | |
+ *  | |--------------------------| |
  *  | |    content (description) | |
- *  | |                          | |
  *  | |                          | |
  *  | | -----------  ----------- | |
  *  | | | button1 |  | button2 | | |
  *  | | -----------  ----------- | |
- *  | |                          | |
  *  | ---------------------------- |
+ *  |                              |
  *  --------------------------------
  */
-/* TODO(k.tak): UI layout refinement */
 void showPopup(TpkpPopup *pdp)
 {
 	SLOGD("Start to make popup");
@@ -174,64 +173,43 @@ void showPopup(TpkpPopup *pdp)
 	TPKP_CHECK_THROW_EXCEPTION(pdp != nullptr,
 		TPKP_E_INTERNAL, "pdp shouldn't be null");
 
-	pdp->win = elm_win_add(nullptr, "tpkp popup", ELM_WIN_NOTIFICATION);
+	/* create win */
+	Evas_Object *win = elm_win_add(nullptr, "tpkp popup", ELM_WIN_NOTIFICATION);
+	elm_win_autodel_set(win, EINA_TRUE);
+	elm_win_indicator_opacity_set(win, ELM_WIN_INDICATOR_TRANSLUCENT);
+	elm_win_borderless_set(win, EINA_TRUE);
+	elm_win_alpha_set(win, EINA_TRUE);
+	evas_object_show(win);
 
-	elm_win_autodel_set(pdp->win, EINA_TRUE);
-	elm_win_indicator_opacity_set(pdp->win, ELM_WIN_INDICATOR_TRANSLUCENT);
-	elm_win_alpha_set(pdp->win, true);
-	evas_object_show(pdp->win);
+	/* create popup */
+	auto contentString = getPopupContentString(pdp);
+	Evas_Object *popup = elm_popup_add(win);
+	evas_object_size_hint_weight_set(popup, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+	elm_object_text_set(popup, contentString.get());
+	elm_object_part_text_set(popup, "title,text", dgettext(PROJECT_NAME, "SID_TITLE_PUBLIC_KEY_MISMATCHED"));
+	evas_object_show(popup);
 
-	pdp->popup = elm_popup_add(pdp->win);
-	evas_object_show(pdp->popup);
+	/* create allow button */
+	Evas_Object *buttonAllow = elm_button_add(popup);
+	elm_object_style_set(buttonAllow, "bottom");
+	elm_object_text_set(buttonAllow, dgettext(PROJECT_NAME, "SID_BTN_ALLOW"));
+	elm_object_part_content_set(popup, "button1", buttonAllow);
+	evas_object_smart_callback_add(buttonAllow, "clicked", answerAllowCb, pdp);
+	evas_object_show(buttonAllow);
 
-	pdp->box = elm_box_add(pdp->popup);
-	evas_object_size_hint_weight_set(pdp->box, EVAS_HINT_EXPAND, 0);
-	evas_object_size_hint_align_set(pdp->box, EVAS_HINT_FILL, 0.0);
-	evas_object_show(pdp->box);
-
-	pdp->title = elm_label_add(pdp->popup);
-	elm_object_style_set(pdp->title, "elm.text.title");
-	elm_object_text_set(pdp->title, dgettext(PROJECT_NAME, "SID_TITLE_PUBLIC_KEY_MISMATCHED"));
-	evas_object_show(pdp->title);
-	elm_box_pack_end(pdp->box, pdp->title);
-
-	pdp->content = elm_label_add(pdp->popup);
-	elm_object_style_set(pdp->content, "elm.swallow.content");
-	elm_label_line_wrap_set(pdp->content, ELM_WRAP_MIXED);
-	char *contentFormat = dgettext(PROJECT_NAME, "SID_CONTENT_PUBLIC_KEY_MISMATCHED");
-	char *content = nullptr;
-	if (asprintf(&content, contentFormat, pdp->hostname.c_str()) == -1) {
-		SLOGE("Failed to alloc memory for popup text. Just go for it.");
-		elm_object_text_set(pdp->content, contentFormat);
-	} else {
-		elm_object_text_set(pdp->content, content);
-		free(content);
-	}
-
-	evas_object_size_hint_weight_set(pdp->content, EVAS_HINT_EXPAND, 0.0);
-	evas_object_size_hint_align_set(pdp->content, EVAS_HINT_FILL, EVAS_HINT_FILL);
-	evas_object_show(pdp->content);
-	elm_box_pack_end(pdp->box, pdp->content);
-
-	elm_object_part_content_set(pdp->popup, "default", pdp->box);
-
-	pdp->buttonAllow = elm_button_add(pdp->popup);
-	elm_object_style_set(pdp->buttonAllow, "elm.swallow.content.button1");
-	elm_object_text_set(pdp->buttonAllow, dgettext(PROJECT_NAME, "SID_BTN_ALLOW"));
-	elm_object_part_content_set(pdp->popup, "button1", pdp->buttonAllow);
-	evas_object_smart_callback_add(pdp->buttonAllow, "clicked", answerAllowCb, pdp);
-	evas_object_show(pdp->buttonAllow);
-
-	pdp->buttonDeny = elm_button_add(pdp->popup);
-	elm_object_style_set(pdp->buttonDeny, "elm.swallow.content.button2");
-	elm_object_text_set(pdp->buttonDeny, dgettext(PROJECT_NAME, "SID_BTN_DENY"));
-	elm_object_part_content_set(pdp->popup, "button2  ", pdp->buttonDeny);
-	evas_object_smart_callback_add(pdp->buttonDeny, "clicked", answerDenyCb, pdp);
-	evas_object_show(pdp->buttonDeny);
+	/* create deny button */
+	Evas_Object *buttonDeny = elm_button_add(popup);
+	elm_object_style_set(buttonDeny, "bottom");
+	elm_object_text_set(buttonDeny, dgettext(PROJECT_NAME, "SID_BTN_DENY"));
+	elm_object_part_content_set(popup, "button2", buttonDeny);
+	evas_object_smart_callback_add(buttonDeny, "clicked", answerDenyCb, pdp);
+	evas_object_show(buttonDeny);
 
 	if (pdp->timeout > 0) {
 		ecore_timer_add(pdp->timeout / 1000, timeoutCb, pdp);
 	}
+
+	pdp->win = win;
 
 	SLOGD("elm_run start");
 	elm_run();
