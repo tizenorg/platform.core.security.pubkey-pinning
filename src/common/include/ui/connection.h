@@ -24,8 +24,6 @@
 
 #include "ui/popup_common.h"
 
-#define TPKP_UI_SOCK_ADDR "/tmp/.tpkp-ui-backend.sock"
-
 namespace TPKP {
 namespace UI {
 

@@ -83,7 +83,7 @@ Response runPopup(const std::string &hostname, int timeout) noexcept
 		else if (timeout < TIMEOUT_MS_MIN)
 			timeout = TIMEOUT_MS_MIN;
 
-		ServiceConnection connection(TPKP_UI_SOCK_ADDR, timeout);
+		ServiceConnection connection(SOCK_PATH, timeout);
 		BinaryStream outStream = connection.processRequest(inStream);
 
 		deserialize(pdp, outStream);

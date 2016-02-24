@@ -1,5 +1,5 @@
 [Socket]
-ListenStream=/tmp/.tpkp-ui-backend.sock
+ListenStream=@SOCK_PATH@
 SocketMode=0777
 Service=pubkey-pinning-popup.service
 

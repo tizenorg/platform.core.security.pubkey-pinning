@@ -41,8 +41,6 @@
 #endif
 #define LOG_TAG "TPKP_POPUP"
 
-#define TPKP_UI_SOCK_ADDR "/tmp/.tpkp-ui-backend.sock"
-
 using namespace TPKP::UI;
 
 namespace {
@@ -242,7 +240,7 @@ int getSockFromSystemd(void)
 	int n = sd_listen_fds(0);
 
 	for (int fd = SD_LISTEN_FDS_START; fd < SD_LISTEN_FDS_START + n; ++fd) {
-		if (sd_is_socket_unix(fd, SOCK_STREAM, 1, TPKP_UI_SOCK_ADDR, 0) > 0) {
+		if (sd_is_socket_unix(fd, SOCK_STREAM, 1, SOCK_PATH, 0) > 0) {
 			SLOGD("Get socket from systemd. fd[%d]", fd);
 			return fd;
 		}
