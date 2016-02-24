@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Samsung Electronics Co., Ltd All Rights Reserved
+# Copyright (c) 2016 Samsung Electronics Co., Ltd All Rights Reserved
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ SET(TPKP_COMMON_SRCS
 	url/url_parse_file.cc
 	net/http/transport_security_state.cpp
 	src/tpkp_common.cpp
+	src/tpkp_exception.cpp
 	src/tpkp_parser.cpp
 	src/tpkp_client_cache.cpp
 	ui/popup_common.cpp

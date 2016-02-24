@@ -31,6 +31,7 @@
 #include <gnutls/x509.h>
 
 #include "tpkp_common.h"
+#include "tpkp_logger.h"
 #include "tpkp_client_cache.h"
 
 namespace {

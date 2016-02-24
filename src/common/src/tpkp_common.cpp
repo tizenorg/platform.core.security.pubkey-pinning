@@ -30,6 +30,7 @@
 #include "net/http/transport_security_state.h"
 #include "net/http/transport_security_state_static.h"
 
+#include "tpkp_logger.h"
 #include "tpkp_parser.h"
 #include "ui/popup_runner.h"
 
@@ -44,41 +45,6 @@ inline size_t _arraySize(const T &t)
 } // anonymous namespace
 
 namespace TPKP {
-
-Exception::Exception(tpkp_e code, const std::string &message)
-	: m_code(code)
-	, m_message(message)
-{}
-
-const char *Exception::what(void) const noexcept
-{
-	return m_message.c_str();
-}
-
-tpkp_e Exception::code(void) const noexcept
-{
-	return m_code;
-}
-
-tpkp_e ExceptionSafe(const std::function<void()> &func)
-{
-	try {
-		func();
-		return TPKP_E_NONE;
-	} catch (const Exception &e) {
-		SLOGE("Exception: %s", e.what());
-		return e.code();
-	} catch (const std::bad_alloc &e) {
-		SLOGE("bad_alloc std exception: %s", e.what());
-		return TPKP_E_MEMORY;
-	} catch (const std::exception &e) {
-		SLOGE("std exception: %s", e.what());
-		return TPKP_E_STD_EXCEPTION;
-	} catch (...) {
-		SLOGE("Unhandled exception occured!");
-		return TPKP_E_INTERNAL;
-	}
-}
 
 class Context::Impl {
 public:

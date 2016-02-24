@@ -21,17 +21,19 @@
  */
 #pragma once
 
-#include <sys/types.h>
 #include <string>
 #include <vector>
 #include <memory>
-#include <sstream>
 #include <type_traits>
 
+#include "tpkp_exception.h"
 #include "tpkp_error.h"
-#include "tpkp_logger.h"
 
 #define EXPORT_API __attribute__((visibility("default")))
+
+/*
+ *  classes under this header may throw exception which declared in tpkp_exception.h
+ */
 
 namespace TPKP {
 
@@ -70,20 +72,6 @@ struct HashValue {
 
 using HashValueVector = std::vector<HashValue>;
 
-class EXPORT_API Exception : public std::exception {
-public:
-	explicit Exception(tpkp_e code, const std::string &message);
-	virtual const char *what(void) const noexcept;
-	tpkp_e code(void) const noexcept;
-
-private:
-	tpkp_e m_code;
-	std::string m_message;
-};
-
-EXPORT_API
-tpkp_e ExceptionSafe(const std::function<void()> &func) noexcept;
-
 class EXPORT_API Context {
 public:
 	Context() = delete;
@@ -100,13 +88,3 @@ private:
 };
 
 }
-
-#define TPKP_THROW_EXCEPTION(code, message) \
-do {                                        \
-	std::ostringstream log;                 \
-	log << message;                         \
-	throw TPKP::Exception(code, log.str()); \
-} while(false)
-
-#define TPKP_CHECK_THROW_EXCEPTION(cond, code, message) \
-	if (!(cond)) TPKP_THROW_EXCEPTION(code, message)

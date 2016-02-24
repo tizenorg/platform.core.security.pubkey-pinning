@@ -32,11 +32,7 @@
 #include <systemd/sd-daemon.h>
 #include <vconf.h>
 
-/*
- * TODO(k.tak): Separate TPKP::Exception related codes from tpkp_common
- *              not to include "tpkp_common.h" which have lot of dependencies
- */
-#include "tpkp_common.h"
+#include "tpkp_exception.h"
 #include "tpkp_logger.h"
 #include "ui/popup_common.h"
 

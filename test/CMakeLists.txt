@@ -70,6 +70,7 @@ SET(TEST_POPUP_SRCS
 	${PROJECT_SOURCE_DIR}/src/common/url/url_parse_file.cc
 	${PROJECT_SOURCE_DIR}/src/common/net/http/transport_security_state.cpp
 	${PROJECT_SOURCE_DIR}/src/common/src/tpkp_common.cpp
+	${PROJECT_SOURCE_DIR}/src/common/src/tpkp_exception.cpp
 	${PROJECT_SOURCE_DIR}/src/common/src/tpkp_parser.cpp
 	${PROJECT_SOURCE_DIR}/src/common/ui/popup_runner.cpp
 	${PROJECT_SOURCE_DIR}/src/common/ui/popup_common.cpp
