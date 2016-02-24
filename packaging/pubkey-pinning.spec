@@ -61,11 +61,13 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 
 export LDFLAGS+="-Wl,--rpath=%_prefix/lib"
 
+%global sock_path /tmp/.%name-popup.sock
 
 %{!?build_type:%define build_type "Release"}
 %cmake . -DCMAKE_INSTALL_PREFIX=%_prefix \
         -DVERSION=%version               \
         -DINCLUDEDIR=%_includedir        \
+        -DSOCK_PATH=%sock_path           \
         -DCMAKE_BUILD_TYPE=%build_type   \
 %if 0%{?pubkey_pinning_test_build}
         -DPUBKEY_PINNING_TEST_BUILD=1    \
