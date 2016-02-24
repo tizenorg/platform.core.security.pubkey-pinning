@@ -43,14 +43,6 @@ namespace url {
 URL_EXPORT bool IsStandard(const char* spec, const Component& scheme);
 URL_EXPORT bool IsStandard(const base::char16* spec, const Component& scheme);
 
-// TODO(brettw) remove this. This is a temporary compatibility hack to avoid
-// breaking the WebKit build when this version is synced via Chrome.
-inline bool IsStandard(const char* spec,
-                       int spec_len,
-                       const Component& scheme) {
-  return IsStandard(spec, scheme);
-}
-
 // Compare the lower-case form of the given string against the given ASCII
 // string.  This is useful for doing checking if an input string matches some
 // token, and it is optimized to avoid intermediate string copies.
