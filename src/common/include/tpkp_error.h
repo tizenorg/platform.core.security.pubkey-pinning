@@ -36,6 +36,11 @@ typedef enum {
 	TPKP_E_INVALID_PEER_CERT_CHAIN  = -6,
 	TPKP_E_PUBKEY_MISMATCH          = -7,
 	TPKP_E_CERT_VERIFICATION_FAILED = -8,
+	TPKP_E_INVALID_PARAMETER        = -9,
+	TPKP_E_IO                       = -10,
+	TPKP_E_OUT_OF_MEMORY            = -11,
+	TPKP_E_TIMEOUT                  = -12,
+	TPKP_E_PERMISSION_DENIED        = -13,
 	TPKP_E_STD_EXCEPTION            = -99,
 	TPKP_E_INTERNAL                 = -100
 } tpkp_e;

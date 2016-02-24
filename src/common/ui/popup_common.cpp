@@ -94,7 +94,7 @@ void sendStream(int fd, const BinaryStream &stream)
 			if (err == EINTR)
 				continue;
 			else
-				TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL,
+				TPKP_THROW_EXCEPTION(TPKP_E_IO,
 					"write failed with errno: " << err);
 		}
 		offset += ret;
@@ -116,7 +116,7 @@ BinaryStream receiveStream(int fd)
 			if (err == EINTR)
 				continue;
 			else
-				TPKP_THROW_EXCEPTION(TPKP_E_INTERNAL,
+				TPKP_THROW_EXCEPTION(TPKP_E_IO,
 					"read failed with errno: " << err);
 		}
 	}
