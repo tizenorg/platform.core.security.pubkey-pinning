@@ -2,7 +2,7 @@
 
 Name:       pubkey-pinning
 Summary:    Https Public Key Pinning for Tizen platform
-Version:    0.0.2
+Version:    0.0.3
 Release:    0
 Group:      Security/Libraries
 License:    Apache-2.0 and BSD-2.0 and MPL-1.1
