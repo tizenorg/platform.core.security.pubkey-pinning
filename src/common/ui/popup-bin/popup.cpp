@@ -22,6 +22,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <functional>
 #include <libintl.h>
 #include <poll.h>
 #include <sys/un.h>
@@ -44,6 +45,8 @@
 using namespace TPKP::UI;
 
 namespace {
+
+using CstringPtr = std::unique_ptr<char, std::function<void(void*)>>;
 
 struct TpkpPopup {
 	/* inputs */
@@ -130,7 +133,7 @@ Eina_Bool timeoutCb(void *data)
 	return ECORE_CALLBACK_CANCEL;
 }
 
-std::unique_ptr<char> getPopupContentString(TpkpPopup *pdp)
+CstringPtr getPopupContentString(TpkpPopup *pdp)
 {
 	char *contentFormat = dgettext(PROJECT_NAME, "SID_CONTENT_PUBLIC_KEY_MISMATCHED");
 	char *content = nullptr;
@@ -139,7 +142,7 @@ std::unique_ptr<char> getPopupContentString(TpkpPopup *pdp)
 		TPKP_THROW_EXCEPTION(TPKP_E_MEMORY,
 			"Failed to alloc memory for popup text");
 
-	return std::unique_ptr<char>(content);
+	return CstringPtr(content, free);
 }
 
 /*

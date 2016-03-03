@@ -69,7 +69,7 @@ void SockRaii::connectWrapper(int sock, const std::string &interface)
 
 	memset(&clientaddr, 0, sizeof(clientaddr));
 	clientaddr.sun_family = AF_UNIX;
-	strcpy(clientaddr.sun_path, interface.c_str());
+	strncpy(clientaddr.sun_path, interface.c_str(), sizeof(clientaddr.sun_path) - 1);
 
 	int ret = TEMP_FAILURE_RETRY(
 			::connect(sock, (struct sockaddr *)&clientaddr, SUN_LEN(&clientaddr)));
