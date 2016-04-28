@@ -6,6 +6,3 @@ ExecStart=/usr/bin/tpkp-popup
 Type=simple
 EnvironmentFile=/run/tizen-system-env
 Sockets=pubkey-pinning-popup.socket
-
-[Install]
-WantedBy=default.target

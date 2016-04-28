@@ -79,9 +79,7 @@ make %{?_smp_mflags}
 
 %install
 %make_install
-mkdir -p %buildroot%_unitdir_user/default.target.wants
 mkdir -p %buildroot%_unitdir_user/sockets.target.wants
-ln -sf ../%name-popup.service %buildroot%_unitdir_user/default.target.wants/%name-popup.service
 ln -sf ../%name-popup.socket %buildroot%_unitdir_user/sockets.target.wants/%name-popup.socket
 %find_lang %{name}
 
@@ -89,12 +87,17 @@ ln -sf ../%name-popup.socket %buildroot%_unitdir_user/sockets.target.wants/%name
 /sbin/ldconfig
 systemctl daemon-reload
 if [ $1 == 1 ]; then
-    systemctl restart %name-popup.service
+    systemctl start %name-popup.socket
+fi
+
+if [ $1 == 2 ]; then
+    systemctl restart %name-popup.socket
 fi
 
 %preun
 if [ $1 == 0 ]; then
     systemctl stop %name-popup.service
+    systemctl stop %name-popup.socket
     systemctl disable %name-popup
 fi
 
@@ -112,7 +115,6 @@ systemctl daemon-reload
 %_libdir/libtpkp-gnutls.so.*
 %_unitdir_user/%name-popup.service
 %_unitdir_user/%name-popup.socket
-%_unitdir_user/default.target.wants/%name-popup.service
 %_unitdir_user/sockets.target.wants/%name-popup.socket
 %_bindir/tpkp-popup
 
